@@ -1151,6 +1151,18 @@ void Assembler::stxr(const Register& rs,
 }
 
 
+void Assembler::ld1(const VRegister& vt,
+                    const MemOperand& src) {
+  LoadStoreStruct(vt, src, NEON_LD1_1v);
+}
+
+
+void Assembler::st1(const VRegister& vt,
+                    const MemOperand& src) {
+  LoadStoreStruct(vt, src, NEON_ST1_1v);
+}
+
+
 void Assembler::mov(const Register& rd, const Register& rm) {
   // Moves involving the stack pointer are encoded as add immediate with
   // second operand of zero. Otherwise, orr with first operand zr is
@@ -1808,6 +1820,38 @@ void Assembler::LoadStore(const CPURegister& rt,
       not_reached();
     }
   }
+}
+
+
+void Assembler::LoadStoreStruct(const VRegister& vt,
+                                const MemOperand& addr,
+                                NEONLoadStoreMultiStructOp op) {
+  USE(vt);
+  Emit(op | LoadStoreStructAddrModeField(addr) | LSVFormat(vt) | Rt(vt));
+}
+
+
+// NEON structure loads and stores.
+Instr Assembler::LoadStoreStructAddrModeField(const MemOperand& addr) {
+  Instr addr_field = RnSP(addr.base());
+
+  if (addr.IsPostIndex()) {
+    static_assert(NEONLoadStoreMultiStructPostIndex ==
+        static_cast<NEONLoadStoreMultiStructPostIndexOp>(
+            NEONLoadStoreSingleStructPostIndex), "");
+
+    addr_field |= NEONLoadStoreMultiStructPostIndex;
+    if (addr.offset() == 0) {
+      addr_field |= RmNot31(addr.regoffset());
+    } else {
+      // The immediate post index addressing mode is indicated by rm = 31.
+      // The immediate is implied by the number of vector registers used.
+      addr_field |= (0x1f << Rm_offset);
+    }
+  } else {
+    assert(addr.IsImmediateOffset() && (addr.offset() == 0));
+  }
+  return addr_field;
 }
 
 
