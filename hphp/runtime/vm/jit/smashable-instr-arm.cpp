@@ -19,6 +19,7 @@
 #include "hphp/runtime/vm/jit/abi-arm.h"
 #include "hphp/runtime/vm/jit/alignment.h"
 #include "hphp/runtime/vm/jit/align-arm.h"
+#include "hphp/runtime/vm/jit/mc-generator.h"
 
 #include "hphp/util/asm-x64.h"
 #include "hphp/util/data-block.h"
@@ -96,9 +97,7 @@ TCA emitSmashableCall(CodeBlock& cb, CGMeta& fixups, TCA target) {
   return start;
 }
 
-TCA emitSmashableJmp(CodeBlock& cb, CGMeta& fixups, TCA target) {
-  align(cb, &fixups, Alignment::SmashJmp, AlignContext::Live);
-
+TCA emitSmashableJmpImpl(CodeBlock& cb, TCA target) {
   vixl::MacroAssembler a { cb };
   vixl::Label target_data;
 
@@ -115,18 +114,19 @@ TCA emitSmashableJmp(CodeBlock& cb, CGMeta& fixups, TCA target) {
   return start;
 }
 
-TCA emitSmashableJcc(CodeBlock& cb, CGMeta& fixups, TCA target,
-                     ConditionCode cc) {
-  using namespace vixl;
-  align(cb, &fixups, Alignment::SmashJcc, AlignContext::Live);
+TCA emitSmashableJmp(CodeBlock& cb, CGMeta& fixups, TCA target) {
+  align(cb, &fixups, Alignment::SmashJmp, AlignContext::Live);
+  return emitSmashableJmpImpl(cb, target);
+}
 
+TCA emitSmashableJccImpl(CodeBlock& cb, TCA target, ConditionCode cc) {
   // During smashing, 'cc' is modified first followed by the target address.
   // This can cause 'new cc' jump to 'old target', but never the 'old cc'
   // jump to 'new target'. The former is safe because the 'old target'
   // is a stub.
 
-  MacroAssembler a { cb };
-  Label after_data;
+  vixl::MacroAssembler a { cb };
+  vixl::Label after_data;
 
   auto const start = cb.frontier();
 
@@ -134,10 +134,16 @@ TCA emitSmashableJcc(CodeBlock& cb, CGMeta& fixups, TCA target,
   a.    B    (&after_data, InvertCondition(arm::convertCC(cc)));
 
   // Emit the smashable jump
-  emitSmashableJmp(cb, fixups, target);
+  emitSmashableJmpImpl(cb, target);
   a.    bind (&after_data);
 
   return start;
+}
+
+TCA emitSmashableJcc(CodeBlock& cb, CGMeta& fixups, TCA target,
+                     ConditionCode cc) {
+  align(cb, &fixups, Alignment::SmashJcc, AlignContext::Live);
+  return emitSmashableJccImpl(cb, target, cc);
 }
 
 std::pair<TCA,TCA>
@@ -174,7 +180,7 @@ void smashJmp(TCA inst, TCA target) {
 void smashJcc(TCA inst, TCA target, ConditionCode cc) {
   if (cc != CC_None) {
     // Condition has changed, emit the 'jccs' sequence again
-    emitSmashableJcc(mcg->code.blockFor(inst), target, cc);
+    emitSmashableJccImpl(mcg->code().blockFor(inst), target, cc);
   } else {
     // Update the target address
     smashInstr(inst, target, smashableJccLen());
