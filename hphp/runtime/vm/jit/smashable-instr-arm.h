@@ -38,12 +38,17 @@ namespace arm {
 /*
  * Number of instructions (each of which is four bytes) in the sequence, plus
  * the size of the smashable immediate.
+ *
+ * For smashable call, only the load and branch+link instructions are acccounted
+ * in length. As the branch at the call return site jumps over the smashable
+ * immediate, they can be ignored. This is also helpful in call return address
+ * calculations (like in smashableCallFromRet() etc.)
  */
 constexpr size_t smashableMovqLen() { return 2 * 4 + 8; }
 constexpr size_t smashableCmpqLen() { return 0; }
-constexpr size_t smashableCallLen() { return 3 * 4 + 8; }
+constexpr size_t smashableCallLen() { return 2 * 4; }
 constexpr size_t smashableJmpLen()  { return 2 * 4 + 8; }
-constexpr size_t smashableJccLen()  { return 3 * 4 + 8; }
+constexpr size_t smashableJccLen()  { return 4 + smashableJmpLen(); }
 
 TCA emitSmashableMovq(CodeBlock& cb, CGMeta& fixups, uint64_t imm,
                       PhysReg d);
