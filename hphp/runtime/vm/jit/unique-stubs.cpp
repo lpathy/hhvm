@@ -138,23 +138,19 @@ Vinstr simplecall(Vout& v, F helper, Vreg arg, Vreg d) {
 ///////////////////////////////////////////////////////////////////////////////
 
 TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
-  if (arch() != Arch::X64) not_implemented();
-  return x64::emitFunctionEnterHelper(cb, data, us);
+  return ARCH_SWITCH_CALL(emitFunctionEnterHelper, cb, data, us);
 }
 
 TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
-  if (arch() != Arch::X64) not_implemented();
-  return x64::emitFreeLocalsHelpers(cb, data, us);
+  return ARCH_SWITCH_CALL(emitFreeLocalsHelpers, cb, data, us);
 }
 
 TCA emitCallToExit(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
-  if (arch() != Arch::X64) not_implemented();
-  return x64::emitCallToExit(cb, data, us);
+  return ARCH_SWITCH_CALL(emitCallToExit, cb, data, us);
 }
 
 TCA emitEndCatchHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
-  if (arch() != Arch::X64) not_implemented();
-  return x64::emitEndCatchHelper(cb, data, us);
+  return ARCH_SWITCH_CALL(emitEndCatchHelper, cb, data, us);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
