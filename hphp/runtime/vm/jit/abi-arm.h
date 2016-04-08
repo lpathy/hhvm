@@ -57,6 +57,9 @@ PhysReg rret_simd(size_t i);
 PhysReg rarg(size_t i);
 PhysReg rarg_simd(size_t i);
 
+inline PhysReg rfp() { return vixl::x29; }
+inline PhysReg rlink() { return vixl::x30; }
+
 constexpr size_t num_arg_regs() { return 8; }
 constexpr size_t num_arg_regs_simd() { return 0; }
 
@@ -150,7 +153,6 @@ inline vixl::Register svcReqArgReg(unsigned index) {
 
 // vixl MacroAssembler uses ip0/ip1 (x16-17) for macro instructions
 const vixl::Register rAsm(vixl::x18);
-const vixl::Register rLinkReg(vixl::x30);
 const vixl::Register rHostCallReg(vixl::x16);
 
 ///////////////////////////////////////////////////////////////////////////////

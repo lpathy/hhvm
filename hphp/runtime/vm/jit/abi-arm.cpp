@@ -45,7 +45,7 @@ const RegSet kGPUnreserved = kGPCallerSaved | kGPCalleeSaved;
 
 const RegSet kGPReserved =
   rHostCallReg | vixl::x17 | rAsm | rvmtl() |
-  rvmfp() | rLinkReg | vixl::xzr | rsp();
+  rvmfp() | rlink() | vixl::xzr | rsp();
   // ARM machines really only have 32 GP regs.  However, vixl has 33 separate
   // register codes, because it treats the zero register and stack pointer
   // (which are really both register 31) separately.  Rather than lose this
