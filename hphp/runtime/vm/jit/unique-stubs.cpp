@@ -926,7 +926,18 @@ TCA emitEnterTCHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
   us.enterTCExit = vwrap(cb, data, [&] (Vout& v) {
     // Eagerly save VM regs and realign the native stack.
     storeVMRegs(v);
-    v << lea{rsp()[8], rsp()};
+
+    // Realign the native stack, if it was unaligned
+    switch (arch()) {
+      case Arch::X64:
+        v << lea{rsp()[8], rsp()};
+        break;
+      case Arch::ARM:
+        break;
+      case Arch::PPC64:
+        not_implemented();
+        break;
+    }
 
     // Store the return value on the top of the eval stack.  Whenever we get to
     // enterTCExit, we're semantically executing some PHP construct that sends
@@ -975,8 +986,17 @@ TCA emitEnterTCHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
     v << copy{sp, rvmsp()};
     v << copy{tl, rvmtl()};
 
-    // Unalign the native stack.
-    v << lea{rsp()[-8], rsp()};
+    // Unalign the native stack, if needed
+    switch (arch()) {
+      case Arch::X64:
+        v << lea{rsp()[-8], rsp()};
+        break;
+      case Arch::ARM:
+        break;
+      case Arch::PPC64:
+        not_implemented();
+        break;
+    }
 
     // Check if `calleeAR' was set.
     auto const sf = v.makeReg();

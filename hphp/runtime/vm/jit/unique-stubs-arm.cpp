@@ -65,7 +65,7 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
     // chain, in order to find the proper fixup for the VMRegAnchor in the
     // intercept handler.
 
-    v << push{PhysReg{rLinkReg}};
+    v << push{rlink()};
     v << push{rvmfp()};
     v << copy{rsp(), rvmfp()};
 
@@ -94,7 +94,7 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
       v << pop{rvmfp()};
       v << pop{saved_rip};
 
-      // Drop our call frame; Pop off rLinkReg and rvmfp() pushed above
+      // Drop our call frame; Pop off rlink() and rvmfp() pushed above
       v << lea{rsp()[16], rsp()};
 
       // Sync vmsp and the return regs.
@@ -112,7 +112,7 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
 
     // Restore rvmfp() and return to the callee's func prologue.
     v << pop{rvmfp()};
-    v << pop{PhysReg{rLinkReg}};
+    v << pop{rlink()};
     v << ret{};
   });
 
@@ -252,7 +252,7 @@ TCA emitCallToExit(CodeBlock& cb, DataBlock& data, const UniqueStubs& us) {
   vixl::Label target_data;
   auto const start = cb.frontier();
 
-  // Emulating the return to enterTCExit. Pop off the x29,x30 pair
+  // Emulating the return to enterTCExit. Pop off the FP, LR pair
   a.Add(vixl::sp, vixl::sp, 16);
 
   // Jump to enterTCExit
