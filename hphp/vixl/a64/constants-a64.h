@@ -1130,7 +1130,9 @@ enum FPIntegerConvertOp {
   FMOV_ws   = FPIntegerConvertFixed | 0x00060000,
   FMOV_sw   = FPIntegerConvertFixed | 0x00070000,
   FMOV_xd   = FMOV_ws | SixtyFourBits | FP64,
-  FMOV_dx   = FMOV_sw | SixtyFourBits | FP64
+  FMOV_dx   = FMOV_sw | SixtyFourBits | FP64,
+  FMOV_d1_x = FPIntegerConvertFixed | SixtyFourBits | 0x008F0000,
+  FMOV_x_d1 = FPIntegerConvertFixed | SixtyFourBits | 0x008E0000
 };
 
 // Conversion between fixed point and floating point.

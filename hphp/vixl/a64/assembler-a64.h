@@ -631,6 +631,10 @@ class Assembler {
     return UpdateAndGetByteOffsetTo(label) >> kInstructionSizeLog2;
   }
 
+  HPHP::CodeBlock& code() const { return cb_; }
+
+  HPHP::jit::TCA base() const { return cb_.base(); }
+
   HPHP::jit::TCA frontier() const {
     return cb_.frontier();
   }
@@ -1190,6 +1194,12 @@ class Assembler {
 
   // Move FP register to FP register.
   void fmov(FPRegister fd, FPRegister fn);
+
+  // Move register to FP register 1
+  void fmov(const FPRegister& fd, int index, const Register& rn);
+
+  // Move FP register 1 to register
+  void fmov(const Register& rd, const FPRegister& fn, int index);
 
   // FP add.
   void fadd(const FPRegister& fd, const FPRegister& fn, const FPRegister& fm);

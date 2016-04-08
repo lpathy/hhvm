@@ -1231,6 +1231,20 @@ void Assembler::fmov(FPRegister fd, FPRegister fn) {
 }
 
 
+void Assembler::fmov(const FPRegister& fd, int index, const Register& rn) {
+  assert(index == 1);
+  USE(index);
+  Emit(FMOV_d1_x | Rd(fd) | Rn(rn));
+}
+
+
+void Assembler::fmov(const Register& rd, const FPRegister& fn, int index) {
+  assert(index == 1);
+  USE(index);
+  Emit(FMOV_x_d1 | Rd(rd) | Rn(fn));
+}
+
+
 void Assembler::fadd(const FPRegister& fd,
                      const FPRegister& fn,
                      const FPRegister& fm) {
