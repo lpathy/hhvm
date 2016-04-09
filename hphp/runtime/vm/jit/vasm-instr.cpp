@@ -67,10 +67,6 @@ bool isBlockEnd(const Vinstr& inst) {
     case Vinstr::phpret:
     case Vinstr::leavetc:
     case Vinstr::fallthru:
-    // arm specific
-    case Vinstr::cbcc:
-    case Vinstr::tbcc:
-    case Vinstr::brk:
       return true;
     default:
       return false;
@@ -179,10 +175,12 @@ Width width(Vinstr::Opcode op) {
     case Vinstr::sarq:
     case Vinstr::shlq:
     // arm instructions
-    case Vinstr::brk:
-    case Vinstr::cbcc:
-    case Vinstr::hostcall:
-    case Vinstr::tbcc:
+    case Vinstr::addqinf:
+    case Vinstr::mrs:
+    case Vinstr::msr:
+    case Vinstr::orli:
+    case Vinstr::pushp:
+    case Vinstr::shlqinf:
     // ppc64 instructions
     case Vinstr::extsb:
     case Vinstr::extsw:

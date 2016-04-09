@@ -276,10 +276,12 @@ struct Vunit;
   O(sarq, Inone, UH(s,d), DH(d,s) D(sf))\
   O(shlq, Inone, UH(s,d), DH(d,s) D(sf))\
   /* arm instructions */\
-  O(brk, I(code), Un, Dn)\
-  O(cbcc, I(cc), U(s), Dn)\
-  O(hostcall, I(argc), U(args), Dn)\
-  O(tbcc, I(cc) I(bit), U(s), Dn)\
+  O(mrs, I(s), Un, D(r))\
+  O(msr, I(s), U(r), Dn)\
+  O(shlqinf, I(s0), UH(s1,d), DH(d,s1))\
+  O(addqinf, I(s0), UH(s1,d), DH(d,s1))\
+  O(orli, I(s0), UH(s1,d), DH(d,s1) D(sf))\
+  O(pushp, Inone, U(s0) U(s1), Dn)\
   /* ppc64 instructions */\
   O(extsb, Inone, UH(s,d), DH(d,s) D(sf))\
   O(extsw, Inone, UH(s,d), DH(d,s) D(sf))\
@@ -1079,13 +1081,14 @@ struct sarq { Vreg64 s, d; VregSF sf; }; // uses rcx
 struct shlq { Vreg64 s, d; VregSF sf; }; // uses rcx
 
 /*
- * ARM intrinsics.
+ * arm intrinsics.
  */
-struct brk { uint16_t code; };
-struct cbcc { vixl::Condition cc; Vreg64 s; Vlabel targets[2]; };
-struct tbcc { vixl::Condition cc; unsigned bit; Vreg64 s; Vlabel targets[2]; };
-// ARM emulator native call intrinsic.
-struct hostcall { RegSet args; uint8_t argc; };
+struct addqinf { Immed s0; Vreg64 s1, d; };
+struct mrs { Immed s; Vreg64 r; };
+struct msr { Vreg64 r; Immed s; };
+struct orli { Immed s0; Vreg32 s1, d; VregSF sf; };
+struct pushp { Vreg64 s0, s1; };
+struct shlqinf { Immed s0; Vreg64 s1, d; };
 
 /*
  * ppc64 intrinsics.
