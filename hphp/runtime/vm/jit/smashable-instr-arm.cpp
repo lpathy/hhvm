@@ -105,7 +105,6 @@ TCA emitSmashableJmpImpl(CodeBlock& cb, TCA target) {
 
   a.    Ldr  (rAsm, &target_data);
   a.    Br   (rAsm);
-  assertx(cb.isFrontierAligned(8));
 
   // Emit the jmp target into the instruction stream.
   a.    bind (&target_data);
@@ -116,6 +115,7 @@ TCA emitSmashableJmpImpl(CodeBlock& cb, TCA target) {
 
 TCA emitSmashableJmp(CodeBlock& cb, CGMeta& fixups, TCA target) {
   align(cb, &fixups, Alignment::SmashJmp, AlignContext::Live);
+  assertx(cb.isFrontierAligned(8));
   return emitSmashableJmpImpl(cb, target);
 }
 
