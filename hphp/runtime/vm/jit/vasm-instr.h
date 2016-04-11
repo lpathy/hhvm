@@ -276,12 +276,14 @@ struct Vunit;
   O(sarq, Inone, UH(s,d), DH(d,s) D(sf))\
   O(shlq, Inone, UH(s,d), DH(d,s) D(sf))\
   /* arm instructions */\
+  O(addqinf, I(s0), UH(s1,d), DH(d,s1))\
+  O(blrn, Inone, Un, Dn)\
+  O(cmpsdf, I(pred), UA(s0) U(s1), D(d))\
   O(mrs, I(s), Un, D(r))\
   O(msr, I(s), U(r), Dn)\
-  O(shlqinf, I(s0), UH(s1,d), DH(d,s1))\
-  O(addqinf, I(s0), UH(s1,d), DH(d,s1))\
   O(orli, I(s0), UH(s1,d), DH(d,s1) D(sf))\
   O(pushp, Inone, U(s0) U(s1), Dn)\
+  O(shlqinf, I(s0), UH(s1,d), DH(d,s1))\
   /* ppc64 instructions */\
   O(extsb, Inone, UH(s,d), DH(d,s) D(sf))\
   O(extsw, Inone, UH(s,d), DH(d,s) D(sf))\
@@ -1084,6 +1086,8 @@ struct shlq { Vreg64 s, d; VregSF sf; }; // uses rcx
  * arm intrinsics.
  */
 struct addqinf { Immed s0; Vreg64 s1, d; };
+struct blrn {};
+struct cmpsdf { ComparisonPred pred; VregDbl s0, s1, d; VregSF sf; };
 struct mrs { Immed s; Vreg64 r; };
 struct msr { Vreg64 r; Immed s; };
 struct orli { Immed s0; Vreg32 s1, d; VregSF sf; };

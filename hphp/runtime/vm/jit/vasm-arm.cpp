@@ -158,7 +158,6 @@ struct Vgen {
   void emit(const contenter& i);
 
   // vm entry abi
-  void emit(const calltc&);
   void emit(const leavetc&) { a->Ret(); }
 
   // exceptions
@@ -186,7 +185,7 @@ struct Vgen {
   void emit(const cmpli& i) { a->Cmp(W(i.s1), i.s0.l()); }
   void emit(const cmpq& i) { a->Cmp(X(i.s1), X(i.s0)); }
   void emit(const cmpqi& i) { a->Cmp(X(i.s1), i.s0.q()); }
-  void emit(const cmpsd& i);
+  void emit(const cmpsdf& i);
   void emit(const cvtsi2sd& i) { a->Scvtf(D(i.d), X(i.s)); }
   void emit(const cvttsd2siq& i) { a->Fcvtzs(X(i.d), D(i.s)); }
   void emit(const decl& i) { a->Sub(W(i.d), W(i.s), 1, SetFlags); }
@@ -206,6 +205,7 @@ struct Vgen {
   void emit(const jmpr& i) { a->Br(X(i.target)); }
   void emit(const lea& i);
   void emit(const leap& i) { a->Mov(X(i.d), i.s.r.disp); }
+  void emit(const lead& i) { a->Mov(X(i.d), (uint64_t) i.s.get()); }
   void emit(const loadb& i) { a->Ldrsb(W(i.d), M(i.s)); }
   void emit(const loadl& i) { a->Ldr(W(i.d), M(i.s)); }
   void emit(const loadqp& i);
@@ -222,6 +222,7 @@ struct Vgen {
   void emit(const movtql& i) { a->Mov(W(i.d), W(i.s)); }
   void emit(const movzbl& i) { a->Uxtb(W(i.d), W(i.s)); }
   void emit(const movzbq& i) { a->Uxtb(X(i.d), W(i.s).X()); }
+  void emit(const movzlq& i) { a->Uxtw(X(i.d), W(i.s).X()); }
   void emit(const mulsd& i) { a->Fmul(D(i.d), D(i.s1), D(i.s0)); }
   void emit(const neg& i) { a->Neg(X(i.d), X(i.s), SetFlags); }
   void emit(const nop& i) { a->Nop(); }
@@ -229,12 +230,10 @@ struct Vgen {
   void emit(const not& i) { a->Mvn(X(i.d), X(i.s)); }
   void emit(const orq& i);
   void emit(const orqi& i);
-  void emit(const pop& i) { a->Ldr(X(i.d), MemOperand(sp, 8, PostIndex)); }
-  void emit(const popm& i);
+  void emit(const pop& i);
   void emit(const psllq& i);
   void emit(const psrlq& i);
-  void emit(const push& i) { a->Str(X(i.s), MemOperand(sp, -8, PreIndex)); }
-  void emit(const pushm& i);
+  void emit(const push& i);
   void emit(const roundsd& i);
   void emit(const sar& i);
   void emit(const sarqi& i);
@@ -278,11 +277,15 @@ struct Vgen {
 
   // arm intrinsics
   void emit(const addqinf& i) { a->Add(X(i.d), X(i.s1), i.s0.q()); }
+  void emit(const blrn& i);
   void emit(const mrs& i) { a->Mrs(X(i.r), vixl::SystemRegister(i.s.l())); }
   void emit(const msr& i) { a->Msr(vixl::SystemRegister(i.s.l()), X(i.r)); }
   void emit(const orli& i);
   void emit(const pushp& i);
   void emit(const shlqinf& i) { a->Lsl(X(i.d), X(i.s1), i.s0.l()); }
+
+  void emit_nop() { a->Nop(); }
+
 private:
   CodeBlock& frozen() { return env.text.frozen().code; }
 
@@ -395,7 +398,12 @@ void Vgen::emit(const load& i) {
 
 void Vgen::emit(const store& i) {
   if (i.s.isGP()) {
-    a->Str(X(i.s), M(i.d));
+    if (i.s == rsp()) {
+      a->Mov(rAsm, X(i.s));
+      a->Str(rAsm, M(i.d));
+    } else {
+      a->Str(X(i.s), M(i.d));
+    }
   } else {
     a->Str(D(i.s), M(i.d));
   }
@@ -515,17 +523,6 @@ void Vgen::emit(const contenter& i) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void Vgen::emit(const calltc& i) {
-  vixl::Label stub;
-
-  // Just call next instruction to balance branch predictor's call return stack.
-  // Rest is implemented in lower(..)
-  a->Bl(&stub);
-  a->bind(&stub);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-
 void Vgen::emit(const nothrow& i) {
   env.meta.catches.emplace_back(a->frontier(), nullptr);
 }
@@ -548,8 +545,8 @@ void Vgen::emit(const cloadq& i) {
   a->Csel(X(i.d), rAsm, X(i.f), C(i.cc));
 }
 
-void Vgen::emit(const cmpsd& i) {
-  // lower(...) saves and restores the flags register. So, 'Fcmp' can be used
+void Vgen::emit(const cmpsdf& i) {
+  // Updates flags
   a->Fcmp(D(i.s0), D(i.s1));
   switch(i.pred) {
     case ComparisonPred::eq_ord: {
@@ -709,9 +706,11 @@ Y(xorqi, Eor, X, i.s0.q(), xzr);
 
 #undef Y
 
-void Vgen::emit(const popm& i) {
-  a->Ldr(rAsm, MemOperand(sp, 8, PostIndex));
-  a->Str(rAsm, M(i.d));
+void Vgen::emit(const pop& i) {
+  // SP access must be 8 byte aligned. Use rAsm instead
+  a->Mov(rAsm, sp);
+  a->Ldr(X(i.d), MemOperand(rAsm, 8, PostIndex));
+  a->Mov(sp, rAsm);
 }
 
 void Vgen::emit(const psllq& i) {
@@ -728,9 +727,11 @@ void Vgen::emit(const psrlq& i) {
   a->Fmov(D(i.d), rAsm);
 }
 
-void Vgen::emit(const pushm& i) {
-  a->Ldr(rAsm, M(i.s));
-  a->Str(rAsm, MemOperand(sp, -8, PreIndex));
+void Vgen::emit(const push& i) {
+  // SP access must be 8 byte aligned. Use rAsm instead
+  a->Mov(rAsm, sp);
+  a->Str(X(i.s), MemOperand(rAsm, -8, PreIndex));
+  a->Mov(sp, rAsm);
 }
 
 void Vgen::emit(const roundsd& i) {
@@ -759,12 +760,13 @@ void Vgen::emit(const roundsd& i) {
 
 /*
  * Flags
- *   SF, ZF, PF are updated according to result
- *   CF is the last bit shifted out of the operand
+ *   SF, ZF, PF should be updated according to result
+ *   CF should be the last bit shifted out of the operand
  *   OF is defined only if 'count' is 1
- *     For left shifts, OF is set to 0 if the MSB of result is same as CF
+ *     For left shifts, OF should be set to 0 if the MSB of result is same as CF
  *     (i.e., the top 2 bits of the operand are same). OF is set to 1 otherwise.
- *     For SAR, OF is set to 0. For SHR, OF is set to MSB of original operand
+ *     For SAR, OF should be set to 0. For SHR, OF should be set to MSB of
+ *     original operand
  *   AF is undefined
  *
  * In the following implementation,
@@ -824,6 +826,15 @@ void Vgen::emit(const unpcklpd& i) {
   a->fmov(D(i.d), 1, rAsm);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+
+void Vgen::emit(const blrn& i) {
+  vixl::Label stub;
+
+  a->Bl(&stub);
+  a->bind(&stub);
+}
+
 void Vgen::emit(const pushp& i) {
   a->Stp(X(i.s0), X(i.s1), MemOperand(sp, -16, PreIndex));
 }
@@ -855,6 +866,7 @@ void lowerVptr(Vptr& p, Vout& v) {
     assertx(!p.base.isValid());
     auto b = v.makeReg();
     v << mrs{TPIDR_EL0, b};
+    p.seg = Vptr::DS;
     p.base = b;
   }
 
@@ -914,8 +926,9 @@ void lowerVptr(Vptr& p, Vout& v) {
       // Not supported, convert to [base, index]
       auto index = v.makeReg();
       if (p.scale > 1) {
-        v << shlqinf{p.scale, p.index, index};
-        v << addqinf{p.disp, index, index};
+        auto t = v.makeReg();
+        v << shlqinf{p.scale, p.index, t};
+        v << addqinf{p.disp, t, index};
       } else {
         v << addqinf{p.disp, p.index, index};
       }
@@ -950,8 +963,6 @@ Y(loadw, s)
 Y(loadzbl, s)
 Y(loadzbq, s)
 Y(loadzlq, s)
-Y(popm, d)
-Y(pushm, s)
 Y(storebi, m)
 Y(storeb, m)
 Y(store, d)
@@ -969,10 +980,10 @@ Y(storew, m)
 void lower(Vunit& u, vasm_opc& i, Vlabel b, size_t z) {  \
   lower_impl(u, b, z, [&] (Vout& v) {                    \
     lowerVptr(i.m, v);                                   \
-    auto r = v.makeReg();                                \
-    v << load_op{i.m, r};                                \
-    v << lower_opc{i.s0, r, r, i.sf};                    \
-    v << store_op{r, i.m};                               \
+    auto r0 = v.makeReg(), r1 = v.makeReg();             \
+    v << load_op{i.m, r0};                               \
+    v << lower_opc{i.s0, r0, r1, i.sf};                  \
+    v << store_op{r1, i.m};                              \
   });                                                    \
 }
 
@@ -1009,19 +1020,15 @@ Y(testwim, testli, loadw, s0, s1)
 
 #undef Y
 
-#define Y(vasm_opc)                                     \
-void lower(Vunit& u, vasm_opc& i, Vlabel b, size_t z) { \
-  lower_impl(u, b, z, [&] (Vout& v) {                   \
-    auto r = v.makeReg();                               \
-    v << mrs{NZCV, r};                                  \
-    v << i;                                             \
-    v << msr{r, NZCV};                                  \
-  });                                                   \
+void lower(Vunit& u, cmpsd& i, Vlabel b, size_t z) {
+  lower_impl(u, b, z, [&] (Vout& v) {
+    // Save and restore the flags register
+    auto r = v.makeReg();
+    v << mrs{NZCV, r};
+    v << cmpsdf {i.pred, i.s0, i.s1, i.d, v.makeReg()};
+    v << msr{r, NZCV};
+  });
 }
-
-Y(cmpsd)
-
-#undef Y
 
 void lower(Vunit& u, cvtsi2sdm& i, Vlabel b, size_t z) {
   lower_impl(u, b, z, [&] (Vout& v) {
@@ -1036,10 +1043,10 @@ void lower(Vunit& u, cvtsi2sdm& i, Vlabel b, size_t z) {
 void lower(Vunit& u, vasm_opc& i, Vlabel b, size_t z) { \
   lower_impl(u, b, z, [&] (Vout& v) {                   \
     lowerVptr(i.m, v);                                  \
-    auto r = v.makeReg();                               \
-    v << load_op{i.m, r};                               \
-    v << lower_opc{r, r, i.sf};                         \
-    v << store_op{r, i.m};                              \
+    auto r0 = v.makeReg(), r1 = v.makeReg();            \
+    v << load_op{i.m, r0};                              \
+    v << lower_opc{r0, r1, i.sf};                       \
+    v << store_op{r1, i.m};                             \
   });                                                   \
 }
 
@@ -1072,8 +1079,8 @@ void lower(Vunit& u, calltc& i, Vlabel b, size_t z) {
     v << ldimmq{i.exittc, r1};
     v << pushp{r0, r1};
 
-    // Emit 'calltc'
-    v << i;
+    // Emit call to next instruction to balance predictor's stack
+    v << blrn{};
 
     // Set the return address to exittc and jump to target
     v << copy{r1, rlink()};
@@ -1083,8 +1090,32 @@ void lower(Vunit& u, calltc& i, Vlabel b, size_t z) {
 
 void lower(Vunit& u, resumetc& i, Vlabel b, size_t z) {
   lower_impl(u, b, z, [&] (Vout& v) {
+    // Push FP, LR for callToExit(..)
+    auto r = v.makeReg();
+    v << ldimmq{i.exittc, r};
+    v << pushp{rfp(), r};
+
+    // Call the helper
     v << callr{i.target, i.args};
     v << jmpi{i.exittc};
+  });
+}
+
+void lower(Vunit& u, popm& i, Vlabel b, size_t z) {
+  lower_impl(u, b, z, [&] (Vout& v) {
+    auto r = v.makeReg();
+    v << pop{r};
+    lowerVptr(i.d, v);
+    v << store{r, i.d};
+  });
+}
+
+void lower(Vunit& u, pushm& i, Vlabel b, size_t z) {
+  lower_impl(u, b, z, [&] (Vout& v) {
+    auto r = v.makeReg();
+    lowerVptr(i.s, v);
+    v << load{i.s, r};
+    v << push{r};
   });
 }
 
