@@ -57,7 +57,6 @@ TCA emitSmashableMovq(CodeBlock& cb, CGMeta& fixups, uint64_t imm,
 
   a.    Ldr  (x2a(d), &imm_data);
   a.    B    (&after_data);
-  assertx(cb.isFrontierAligned(8));
 
   // Emit the immediate into the instruction stream.
   a.    bind (&imm_data);
@@ -115,7 +114,6 @@ TCA emitSmashableJmpImpl(CodeBlock& cb, TCA target) {
 
 TCA emitSmashableJmp(CodeBlock& cb, CGMeta& fixups, TCA target) {
   align(cb, &fixups, Alignment::SmashJmp, AlignContext::Live);
-  assertx(cb.isFrontierAligned(8));
   return emitSmashableJmpImpl(cb, target);
 }
 
@@ -180,7 +178,9 @@ void smashJmp(TCA inst, TCA target) {
 void smashJcc(TCA inst, TCA target, ConditionCode cc) {
   if (cc != CC_None) {
     // Condition has changed, emit the 'jccs' sequence again
-    emitSmashableJccImpl(mcg->code().blockFor(inst), target, cc);
+    CodeBlock cb;
+    cb.init(inst, smashableJccLen(), "smashJcc");
+    emitSmashableJccImpl(cb, target, cc);
   } else {
     // Update the target address
     smashInstr(inst, target, smashableJccLen());
