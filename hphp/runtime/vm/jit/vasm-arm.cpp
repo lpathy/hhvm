@@ -83,14 +83,29 @@ vixl::VRegister V(Vreg r) {
   return x2v(r);
 }
 
+uint8_t Log2(uint8_t value) {
+  switch (value) {
+    case 1:
+      return 0;
+    case 2:
+      return 1;
+    case 4:
+      return 2;
+    case 8:
+      return 3;
+    default:
+      assertx(false);
+  }
+}
+
 vixl::MemOperand M(Vptr p) {
   assertx(p.base.isValid());
   if (p.index.isValid()) {
     assertx(p.disp == 0);
-    return X(p.base)[p.index];
+    return MemOperand(X(p.base), X(p.index), LSL, Log2(p.scale));
   }
   assertx(p.disp >= -256 && p.disp <= 255);
-  return X(p.base)[p.disp];
+  return MemOperand(X(p.base), p.disp);
 }
 
 vixl::Condition C(ConditionCode cc) {
@@ -180,6 +195,7 @@ struct Vgen {
   void emit(const andq& i) { a->And(X(i.d), X(i.s1), X(i.s0), SetFlags); }
   void emit(const andqi& i) { a->And(X(i.d), X(i.s1), i.s0.q(), SetFlags); }
   void emit(const cloadq& i);
+  void emit(const cmovb& i) { a->Csel(W(i.d), W(i.t), W(i.f), C(i.cc)); }
   void emit(const cmovq& i) { a->Csel(X(i.d), X(i.t), X(i.f), C(i.cc)); }
   void emit(const cmpl& i) { a->Cmp(W(i.s1), W(i.s0)); }
   void emit(const cmpli& i) { a->Cmp(W(i.s1), i.s0.l()); }
@@ -432,6 +448,10 @@ void Vgen::emit(const mcprep& i) {
 void Vgen::emit(const call& i) {
   a->Mov(rAsm, reinterpret_cast<uint64_t>(i.target));
   a->Blr(rAsm);
+  if (i.watch) {
+    *i.watch = a->frontier();
+    env.meta.watchpoints.push_back(i.watch);
+  }
 }
 
 void Vgen::emit(const callm& i) {
@@ -875,9 +895,22 @@ void lowerVptr(Vptr& p, Vout& v) {
                   (((p.disp != 0)     & 0x1) << 2));
   switch(mode) {
     case BASE:
-    case INDEX:
     case BASE | INDEX: {
       // ldr/str allow [base] and [base, index], nothing to lower
+      break;
+    }
+
+    case INDEX: {
+      // Not supported, convert to [base]
+      if (p.scale > 1) {
+        auto t = v.makeReg();
+        v << shlqinf{Log2(p.scale), p.index, t};
+        p.base = t;
+      } else {
+        p.base = p.index;
+      }
+      p.index = Vreg{};
+      p.scale = 1;
       break;
     }
 
@@ -908,7 +941,13 @@ void lowerVptr(Vptr& p, Vout& v) {
 
     case INDEX | DISP: {
       // Not supported, convert to [base, #imm] or [base, index]
-      p.base = p.index;
+      if (p.scale > 1) {
+        auto t = v.makeReg();
+        v << shlqinf{Log2(p.scale), p.index, t};
+        p.base = t;
+      } else {
+        p.base = p.index;
+      }
       if (p.disp >= -256 && p.disp <= 255) {
         p.index = Vreg{};
         p.scale = 1;
@@ -927,7 +966,7 @@ void lowerVptr(Vptr& p, Vout& v) {
       auto index = v.makeReg();
       if (p.scale > 1) {
         auto t = v.makeReg();
-        v << shlqinf{p.scale, p.index, t};
+        v << shlqinf{Log2(p.scale), p.index, t};
         v << addqinf{p.disp, t, index};
       } else {
         v << addqinf{p.disp, p.index, index};
@@ -1082,8 +1121,8 @@ void lower(Vunit& u, calltc& i, Vlabel b, size_t z) {
     // Emit call to next instruction to balance predictor's stack
     v << blrn{};
 
-    // Set the return address to exittc and jump to target
-    v << copy{r1, rlink()};
+    // Set the return address to savedRip and jump to target
+    v << copy{r0, rlink()};
     v << jmpr{i.target, i.args};
   });
 }
