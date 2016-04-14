@@ -201,7 +201,6 @@ struct Vgen {
   void emit(const cmpli& i) { a->Cmp(W(i.s1), i.s0.l()); }
   void emit(const cmpq& i) { a->Cmp(X(i.s1), X(i.s0)); }
   void emit(const cmpqi& i) { a->Cmp(X(i.s1), i.s0.q()); }
-  void emit(const cmpsdf& i);
   void emit(const cvtsi2sd& i) { a->Scvtf(D(i.d), X(i.s)); }
   void emit(const cvttsd2siq& i) { a->Fcvtzs(X(i.d), D(i.s)); }
   void emit(const decl& i) { a->Sub(W(i.d), W(i.s), 1, SetFlags); }
@@ -225,6 +224,7 @@ struct Vgen {
   void emit(const loadb& i) { a->Ldrsb(W(i.d), M(i.s)); }
   void emit(const loadl& i) { a->Ldr(W(i.d), M(i.s)); }
   void emit(const loadqp& i);
+  void emit(const loadqd& i);
   void emit(const loadsd& i) { a->Ldr(D(i.d), M(i.s)); }
   void emit(const loadtqb& i) { a->Ldrsb(W(i.d), M(i.s)); }
   void emit(const loadups& i);
@@ -252,13 +252,8 @@ struct Vgen {
   void emit(const push& i);
   void emit(const roundsd& i);
   void emit(const sar& i);
-  void emit(const sarqi& i);
   void emit(const setcc& i) { a->Cset(X(PhysReg(i.d.asReg())), C(i.cc)); }
   void emit(const shl& i);
-  void emit(const shlli& i);
-  void emit(const shlqi& i);
-  void emit(const shrli& i);
-  void emit(const shrqi& i);
   void emit(const sqrtsd& i) { a->Fsqrt(D(i.d), D(i.s)); }
   void emit(const srem& i);
   void emit(const storeb& i) { a->Strb(W(i.s), M(i.m)); }
@@ -292,13 +287,23 @@ struct Vgen {
   void emit(const xorqi& i);
 
   // arm intrinsics
-  void emit(const addqinf& i) { a->Add(X(i.d), X(i.s1), i.s0.q()); }
+  void emit(const addxi& i) { a->Add(X(i.d), X(i.s1), i.s0.q()); }
+  void emit(const asrxi& i);
+  void emit(const asrxis& i);
   void emit(const blrn& i);
+  void emit(const cmpsds& i);
+  void emit(const lslwi& i);
+  void emit(const lslwis& i);
+  void emit(const lslxi& i);
+  void emit(const lslxis& i);
+  void emit(const lsrwi& i);
+  void emit(const lsrwis& i);
+  void emit(const lsrxi& i);
+  void emit(const lsrxis& i);
   void emit(const mrs& i) { a->Mrs(X(i.r), vixl::SystemRegister(i.s.l())); }
   void emit(const msr& i) { a->Msr(vixl::SystemRegister(i.s.l()), X(i.r)); }
-  void emit(const orli& i);
+  void emit(const orswi& i);
   void emit(const pushp& i);
-  void emit(const shlqinf& i) { a->Lsl(X(i.d), X(i.s1), i.s0.l()); }
 
   void emit_nop() { a->Nop(); }
 
@@ -525,18 +530,12 @@ void Vgen::emit(const callarray& i) {
 }
 
 void Vgen::emit(const contenter& i) {
-  vixl::Label Stub, End;
+  vixl::Label End;
 
-  a->B(&End);
-  a->bind(&Stub);
-
-  a->Ldr(rAsm, sp[0]);
+  a->Adr(rAsm, &End);
   a->Str(rAsm, X(i.fp)[AROFF(m_savedRip)]);
-  a->Br(X(i.target));
-
+  a->Blr(X(i.target));
   a->bind(&End);
-  a->Ldr(rAsm, &Stub);
-  a->Blr(rAsm);
   // m_savedRip will point here.
   emit(unwind{{i.targets[0], i.targets[1]}});
 }
@@ -563,27 +562,6 @@ void Vgen::emit(const unwind& i) {
 void Vgen::emit(const cloadq& i) {
   a->Ldr(rAsm, M(i.t));
   a->Csel(X(i.d), rAsm, X(i.f), C(i.cc));
-}
-
-void Vgen::emit(const cmpsdf& i) {
-  // Updates flags
-  a->Fcmp(D(i.s0), D(i.s1));
-  switch(i.pred) {
-    case ComparisonPred::eq_ord: {
-      a->Csetm(rAsm, C(jit::CC_E));
-      break;
-    }
-
-    case ComparisonPred::ne_unord: {
-      a->Csetm(rAsm, C(jit::CC_NE));
-      break;
-    }
-
-    default: {
-      always_assert(false);
-    }
-  }
-  a->Fmov(D(i.d), rAsm);
 }
 
 /*
@@ -677,6 +655,11 @@ void Vgen::emit(const loadqp& i) {
   a->Ldr(X(i.d), X(i.d)[0]);
 }
 
+void Vgen::emit(const loadqd& i) {
+  a->Mov(X(i.d), reinterpret_cast<uint64_t>(i.s.get()));
+  a->Ldr(X(i.d), X(i.d)[0]);
+}
+
 #define Y(vasm_opc, arm_opc, src_dst, m)                   \
 void Vgen::emit(const vasm_opc& i) {                       \
   assertx(i.m.base.isValid());                             \
@@ -715,7 +698,7 @@ void Vgen::emit(const vasm_opc& i) {                \
   a->Bic(vixl::zr, gpr_w(i.d), vixl::zr, SetFlags); \
 }
 
-Y(orli, Orr, W, i.s0.l(), wzr);
+Y(orswi, Orr, W, i.s0.l(), wzr);
 Y(orqi, Orr, X, i.s0.l(), xzr);
 Y(orq, Orr, X, X(i.s0), xzr);
 Y(xorb, Eor, W, W(i.s0), wzr);
@@ -779,34 +762,18 @@ void Vgen::emit(const roundsd& i) {
 }
 
 /*
- * Flags
- *   SF, ZF, PF should be updated according to result
- *   CF should be the last bit shifted out of the operand
- *   OF is defined only if 'count' is 1
- *     For left shifts, OF should be set to 0 if the MSB of result is same as CF
- *     (i.e., the top 2 bits of the operand are same). OF is set to 1 otherwise.
- *     For SAR, OF should be set to 0. For SHR, OF should be set to MSB of
- *     original operand
- *   AF is undefined
- *
- * In the following implementation,
- *   N, Z are updated according to result
- *   C, V are undefined (FIXME)
- *   PF, AF are not available
+ * N, Z are updated according to result
+ * C, V are cleared (FIXME)
+ * PF, AF are not available
  */
-#define Y(vasm_opc, arm_opc, gpr_w, s0, zr)         \
-void Vgen::emit(const vasm_opc& i) {                \
-  a->arm_opc(gpr_w(i.d), gpr_w(i.s1), s0);          \
-  a->Add(vixl::zr, vixl::zr, gpr_w(i.d), SetFlags); \
+#define Y(vasm_opc, arm_opc)                      \
+void Vgen::emit(const vasm_opc& i) {              \
+  a->arm_opc(X(i.d), X(i.s1), X(i.s0));           \
+  a->Bic(vixl::xzr, X(i.d), vixl::xzr, SetFlags); \
 }
 
-Y(sar, Asr, X, X(i.s0), xzr);
-Y(sarqi, Asr, X, i.s0.l(), xzr);
-Y(shl, Lsl, X, X(i.s0), xzr);
-Y(shlli, Lsl, W, i.s0.l(), wzr);
-Y(shlqi, Lsl, X, i.s0.l(), xzr);
-Y(shrli, Lsr, W, i.s0.l(), wzr);
-Y(shrqi, Lsr, X, i.s0.l(), xzr);
+Y(sar, Asr)
+Y(shl, Lsl)
 
 #undef Y
 
@@ -854,6 +821,90 @@ void Vgen::emit(const blrn& i) {
   a->Bl(&stub);
   a->bind(&stub);
 }
+
+void Vgen::emit(const cmpsds& i) {
+  // Updates flags
+  a->Fcmp(D(i.s0), D(i.s1));
+  switch(i.pred) {
+    case ComparisonPred::eq_ord: {
+      a->Csetm(rAsm, C(jit::CC_E));
+      break;
+    }
+
+    case ComparisonPred::ne_unord: {
+      a->Csetm(rAsm, C(jit::CC_NE));
+      break;
+    }
+
+    default: {
+      always_assert(false);
+    }
+  }
+  a->Fmov(D(i.d), rAsm);
+}
+
+#define Y(vasm_opc, arm_opc, gpr_w)              \
+void Vgen::emit(const vasm_opc& i) {             \
+  a->arm_opc(gpr_w(i.d), gpr_w(i.s1), i.s0.l()); \
+}
+
+Y(asrxi, Asr, X)
+Y(lslwi, Lsl, W)
+Y(lslxi, Lsl, X)
+Y(lsrwi, Lsr, W)
+Y(lsrxi, Lsr, X)
+
+#undef Y
+
+/*
+ * Flags for shift instructions
+ *   SF, ZF, PF should be updated according to result
+ *   CF should be the last bit shifted out of the operand
+ *   OF is defined only if 'count' is 1
+ *     For left shifts, OF should be set to 0 if the MSB of result is same as CF
+ *     (i.e., the top 2 bits of the operand are same). OF is set to 1 otherwise.
+ *     For SAR, OF should be set to 0. For SHR, OF should be set to MSB of
+ *     original operand
+ *   AF is undefined
+ *
+ * In the following implementation,
+ *   N, Z are updated according to result
+ *   C is updated with the shifted out bit
+ *   V is cleared (FIXME)
+ *   PF, AF are not available
+ */
+#define Y(vasm_opc, arm_opc, gpr_w, zr)                 \
+void Vgen::emit(const vasm_opc& i) {                    \
+  a->Bic(vixl::zr, gpr_w(i.d), vixl::zr, SetFlags);     \
+  a->Mrs(rAsm, NZCV);                                   \
+  auto d = i.s1;                                        \
+  if (i.s0.l() > 1) {                                   \
+    a->arm_opc(gpr_w(i.df), gpr_w(i.s1), i.s0.l() - 1); \
+    d = i.df;                                           \
+  }                                                     \
+  a->bfm(rAsm, W(d).X(), 35, 0);                        \
+  a->Msr(NZCV, rAsm);                                   \
+}
+
+Y(asrxis, Asr, X, xzr)
+Y(lsrwis, Lsr, W, wzr)
+Y(lsrxis, Lsr, X, xzr)
+
+#undef Y
+
+#define Y(vasm_opc, gpr_w, zr, sz)                  \
+void Vgen::emit(const vasm_opc& i) {                \
+  a->Bic(vixl::zr, gpr_w(i.d), vixl::zr, SetFlags); \
+  a->Mrs(rAsm, NZCV);                               \
+  a->Lsr(gpr_w(i.df), gpr_w(i.s1), sz - i.s0.l());  \
+  a->bfm(rAsm, W(i.df).X(), 35, 0);                 \
+  a->Msr(NZCV, rAsm);                               \
+}
+
+Y(lslwis, W, wzr, 32)
+Y(lslxis, X, xzr, 64)
+
+#undef Y
 
 void Vgen::emit(const pushp& i) {
   a->Stp(X(i.s0), X(i.s1), MemOperand(sp, -16, PreIndex));
@@ -904,7 +955,7 @@ void lowerVptr(Vptr& p, Vout& v) {
       // Not supported, convert to [base]
       if (p.scale > 1) {
         auto t = v.makeReg();
-        v << shlqinf{Log2(p.scale), p.index, t};
+        v << lslxi{Log2(p.scale), p.index, t};
         p.base = t;
       } else {
         p.base = p.index;
@@ -943,7 +994,7 @@ void lowerVptr(Vptr& p, Vout& v) {
       // Not supported, convert to [base, #imm] or [base, index]
       if (p.scale > 1) {
         auto t = v.makeReg();
-        v << shlqinf{Log2(p.scale), p.index, t};
+        v << lslxi{Log2(p.scale), p.index, t};
         p.base = t;
       } else {
         p.base = p.index;
@@ -966,10 +1017,10 @@ void lowerVptr(Vptr& p, Vout& v) {
       auto index = v.makeReg();
       if (p.scale > 1) {
         auto t = v.makeReg();
-        v << shlqinf{Log2(p.scale), p.index, t};
-        v << addqinf{p.disp, t, index};
+        v << lslxi{Log2(p.scale), p.index, t};
+        v << addxi{p.disp, t, index};
       } else {
-        v << addqinf{p.disp, p.index, index};
+        v << addxi{p.disp, p.index, index};
       }
       p.index = index;
       p.scale = 1;
@@ -1030,9 +1081,9 @@ Y(addlim, addli, loadl, storel, s0, m)
 Y(addlm, addl, loadl, storel, s0, m)
 Y(addqim, addqi, load, store, s0, m)
 Y(andbim, andbi, loadb, storeb, s, m)
-Y(orbim, orli, loadb, storeb, s0, m)
+Y(orbim, orswi, loadb, storeb, s0, m)
 Y(orqim, orqi, load, store, s0, m)
-Y(orwim, orli, loadw, storew, s0, m)
+Y(orwim, orswi, loadw, storew, s0, m)
 
 #undef Y
 
@@ -1064,7 +1115,7 @@ void lower(Vunit& u, cmpsd& i, Vlabel b, size_t z) {
     // Save and restore the flags register
     auto r = v.makeReg();
     v << mrs{NZCV, r};
-    v << cmpsdf {i.pred, i.s0, i.s1, i.d, v.makeReg()};
+    v << cmpsds {i.pred, i.s0, i.s1, i.d, v.makeReg()};
     v << msr{r, NZCV};
   });
 }
@@ -1184,6 +1235,31 @@ void lower(Vunit& u, cmpbim& i, Vlabel b, size_t z) {
     v << cmpli{i.s0, r, i.sf};
   });
 }
+
+/*
+ * Shift instructions were split into 2, one does the actual shifting and the
+ * other updates the flags. Following code makes a copy of the original
+ * register, outputs the shift instruction followed by flags update instruction.
+ * If the 'SF' register is not used by subsequent code, the copy and flags
+ * update instructions are removed by the dead code elimination pass
+ */
+#define Y(vasm_opc, lower_opc, sf_opc)                  \
+void lower(Vunit& u, vasm_opc& i, Vlabel b, size_t z) { \
+  lower_impl(u, b, z, [&] (Vout& v) {                   \
+    auto r = v.makeReg(), d = v.makeReg();              \
+    v << copy{i.s1, r};                                 \
+    v << lower_opc{i.s0, i.s1, i.d};                    \
+    v << sf_opc{i.s0, r, i.d, d, i.sf};                 \
+  });                                                   \
+}
+
+Y(sarqi, asrxi, asrxis)
+Y(shlli, lslwi, lslwis)
+Y(shlqi, lslxi, lslxis)
+Y(shrli, lsrwi, lsrwis)
+Y(shrqi, lsrxi, lsrxis)
+
+#undef Y
 
 ///////////////////////////////////////////////////////////////////////////////
 

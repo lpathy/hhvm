@@ -276,14 +276,23 @@ struct Vunit;
   O(sarq, Inone, UH(s,d), DH(d,s) D(sf))\
   O(shlq, Inone, UH(s,d), DH(d,s) D(sf))\
   /* arm instructions */\
-  O(addqinf, I(s0), UH(s1,d), DH(d,s1))\
+  O(addxi, I(s0), UH(s1,d), DH(d,s1))\
+  O(asrxi, I(s0), UH(s1,d), DH(d,s1))\
+  O(asrxis, I(s0), U(s1) U(d), D(df) D(sf))\
   O(blrn, Inone, Un, Dn)\
-  O(cmpsdf, I(pred), UA(s0) U(s1), D(d))\
+  O(cmpsds, I(pred), UA(s0) U(s1), D(d))\
+  O(lslwi, I(s0), UH(s1,d), DH(d,s1))\
+  O(lslwis, I(s0), U(s1) U(d), D(df) D(sf))\
+  O(lslxi, I(s0), UH(s1,d), DH(d,s1))\
+  O(lslxis, I(s0), U(s1) U(d), D(df) D(sf))\
+  O(lsrwi, I(s0), UH(s1,d), DH(d,s1))\
+  O(lsrwis, I(s0), U(s1) U(d), D(df) D(sf))\
+  O(lsrxi, I(s0), UH(s1,d), DH(d,s1))\
+  O(lsrxis, I(s0), U(s1) U(d), D(df) D(sf))\
   O(mrs, I(s), Un, D(r))\
   O(msr, I(s), U(r), Dn)\
-  O(orli, I(s0), UH(s1,d), DH(d,s1) D(sf))\
+  O(orswi, I(s0), UH(s1,d), DH(d,s1) D(sf))\
   O(pushp, Inone, U(s0) U(s1), Dn)\
-  O(shlqinf, I(s0), UH(s1,d), DH(d,s1))\
   /* ppc64 instructions */\
   O(extsb, Inone, UH(s,d), DH(d,s) D(sf))\
   O(extsw, Inone, UH(s,d), DH(d,s) D(sf))\
@@ -1085,14 +1094,23 @@ struct shlq { Vreg64 s, d; VregSF sf; }; // uses rcx
 /*
  * arm intrinsics.
  */
-struct addqinf { Immed s0; Vreg64 s1, d; };
+struct addxi { Immed s0; Vreg64 s1, d; };
+struct asrxi { Immed s0; Vreg64 s1, d; };
+struct asrxis { Immed s0; Vreg64 s1, d, df; VregSF sf; };
 struct blrn {};
-struct cmpsdf { ComparisonPred pred; VregDbl s0, s1, d; VregSF sf; };
+struct cmpsds { ComparisonPred pred; VregDbl s0, s1, d; VregSF sf; };
+struct lslwi { Immed s0; Vreg32 s1, d; };
+struct lslwis { Immed s0; Vreg32 s1, d, df; VregSF sf; };
+struct lslxi { Immed s0; Vreg64 s1, d; };
+struct lslxis { Immed s0; Vreg64 s1, d, df; VregSF sf; };
+struct lsrwi { Immed s0; Vreg32 s1, d; };
+struct lsrwis { Immed s0; Vreg32 s1, d, df; VregSF sf; };
+struct lsrxi { Immed s0; Vreg64 s1, d; };
+struct lsrxis { Immed s0; Vreg64 s1, d, df; VregSF sf; };
 struct mrs { Immed s; Vreg64 r; };
 struct msr { Vreg64 r; Immed s; };
-struct orli { Immed s0; Vreg32 s1, d; VregSF sf; };
+struct orswi { Immed s0; Vreg32 s1, d; VregSF sf; };
 struct pushp { Vreg64 s0, s1; };
-struct shlqinf { Immed s0; Vreg64 s1, d; };
 
 /*
  * ppc64 intrinsics.

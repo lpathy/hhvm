@@ -175,14 +175,23 @@ Width width(Vinstr::Opcode op) {
     case Vinstr::sarq:
     case Vinstr::shlq:
     // arm instructions
-    case Vinstr::addqinf:
+    case Vinstr::addxi:
+    case Vinstr::asrxi:
+    case Vinstr::asrxis:
     case Vinstr::blrn:
-    case Vinstr::cmpsdf:
+    case Vinstr::cmpsds:
+    case Vinstr::lslwi:
+    case Vinstr::lslwis:
+    case Vinstr::lslxi:
+    case Vinstr::lslxis:
+    case Vinstr::lsrwi:
+    case Vinstr::lsrwis:
+    case Vinstr::lsrxi:
+    case Vinstr::lsrxis:
     case Vinstr::mrs:
     case Vinstr::msr:
-    case Vinstr::orli:
+    case Vinstr::orswi:
     case Vinstr::pushp:
-    case Vinstr::shlqinf:
     // ppc64 instructions
     case Vinstr::extsb:
     case Vinstr::extsw:
