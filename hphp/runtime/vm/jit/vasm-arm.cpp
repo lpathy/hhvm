@@ -173,7 +173,7 @@ struct Vgen {
   void emit(const contenter& i);
 
   // vm entry abi
-  void emit(const leavetc&) { a->Ret(); }
+  void emit(const leavetc&) { emit(ret{}); }
 
   // exceptions
   void emit(const landingpad& i) {}
@@ -234,7 +234,7 @@ struct Vgen {
   void emit(const loadzlq& i) { a->Ldr(W(i.d), M(i.s)); }
   void emit(const movb& i) { a->Mov(W(i.d), W(i.s)); }
   void emit(const movl& i) { a->Mov(W(i.d), W(i.s)); }
-  void emit(const movtqb& i) { a->Mov(W(i.d), W(i.s)); }
+  void emit(const movtqb& i) { a->Sxtb(W(i.d), W(i.s)); }
   void emit(const movtql& i) { a->Mov(W(i.d), W(i.s)); }
   void emit(const movzbl& i) { a->Uxtb(W(i.d), W(i.s)); }
   void emit(const movzbq& i) { a->Uxtb(X(i.d), W(i.s).X()); }
@@ -252,7 +252,7 @@ struct Vgen {
   void emit(const push& i);
   void emit(const roundsd& i);
   void emit(const sar& i);
-  void emit(const setcc& i) { a->Cset(X(PhysReg(i.d.asReg())), C(i.cc)); }
+  void emit(const setcc& i) { a->Cset(W(i.d), C(i.cc)); }
   void emit(const shl& i);
   void emit(const sqrtsd& i) { a->Fsqrt(D(i.d), D(i.s)); }
   void emit(const srem& i);
@@ -303,6 +303,7 @@ struct Vgen {
   void emit(const mrs& i) { a->Mrs(X(i.r), vixl::SystemRegister(i.s.l())); }
   void emit(const msr& i) { a->Msr(vixl::SystemRegister(i.s.l()), X(i.r)); }
   void emit(const orswi& i);
+  void emit(const popp& i);
   void emit(const pushp& i);
 
   void emit_nop() { a->Nop(); }
@@ -477,11 +478,11 @@ void Vgen::emit(const stublogue& i) {
 
 void Vgen::emit(const stubret& i) {
   if(i.saveframe) {
-    a->Ldp(X(rfp()), X(rlink()), MemOperand(sp, 16, PostIndex));
+    emit(popp{rfp(), rlink()});
   } else {
-    a->Ldp(rAsm, X(rlink()), MemOperand(sp, 16, PostIndex));
+    emit(popp{PhysReg(rAsm), rlink()});
   }
-  a->Ret();
+  emit(ret{});
 }
 
 void Vgen::emit(const callstub& i) {
@@ -510,7 +511,7 @@ void Vgen::emit(const phpret& i) {
   if (!i.noframe) {
     a->Ldr(X(i.d), X(i.fp)[AROFF(m_sfp)]);
   }
-  a->Ret();
+  emit(ret{});
 }
 
 void Vgen::emit(const callphp& i) {
@@ -645,9 +646,15 @@ void Vgen::emit(const jmpm& i) {
 }
 
 void Vgen::emit(const lea& i) {
-  auto adr = M(i.s);
-  auto offset = reinterpret_cast<int64_t>(adr.offset());
-  a->Add(X(i.d), adr.base(), offset /* Don't set flags */);
+  auto p = i.s;
+  assertx(p.base.isValid());
+  if (p.index.isValid()) {
+    assertx(p.disp == 0);
+    a->Add(X(i.d), X(p.base), Operand(X(p.index), LSL, Log2(p.scale)));
+  } else {
+    assertx(p.disp >= -256 && p.disp <= 255);
+    a->Add(X(i.d), X(p.base), p.disp);
+  }
 }
 
 void Vgen::emit(const loadqp& i) {
@@ -660,20 +667,17 @@ void Vgen::emit(const loadqd& i) {
   a->Ldr(X(i.d), X(i.d)[0]);
 }
 
-#define Y(vasm_opc, arm_opc, src_dst, m)                   \
-void Vgen::emit(const vasm_opc& i) {                       \
-  assertx(i.m.base.isValid());                             \
-  a->Mov(rAsm, X(i.m.base));                               \
-  if (i.m.index.isValid()) {                               \
-    auto shift = (i.m.scale == 2) ? 1 :                    \
-                 (i.m.scale == 4) ? 2 :                    \
-                 (i.m.scale == 3) ? 3 : 0;                 \
-    a->Add(rAsm, rAsm, Operand(X(i.m.index), LSL, shift)); \
-  }                                                        \
-  if (i.m.disp != 0) {                                     \
-    a->Add(rAsm, rAsm, i.m.disp);                          \
-  }                                                        \
-  a->arm_opc(V(i.src_dst), MemOperand(rAsm));              \
+#define Y(vasm_opc, arm_opc, src_dst, m)                             \
+void Vgen::emit(const vasm_opc& i) {                                 \
+  assertx(i.m.base.isValid());                                       \
+  a->Mov(rAsm, X(i.m.base));                                         \
+  if (i.m.index.isValid()) {                                         \
+    a->Add(rAsm, rAsm, Operand(X(i.m.index), LSL, Log2(i.m.scale))); \
+  }                                                                  \
+  if (i.m.disp != 0) {                                               \
+    a->Add(rAsm, rAsm, i.m.disp);                                    \
+  }                                                                  \
+  a->arm_opc(V(i.src_dst), MemOperand(rAsm));                        \
 }
 
 Y(loadups, ld1, d, s)
@@ -782,30 +786,19 @@ void Vgen::emit(const srem& i) {
   a->Msub(X(i.d), rAsm, X(i.s1), X(i.s0));
 }
 
-void Vgen::emit(const storebi& i) {
-  a->Mov(rAsm.W(), i.s.l());
-  a->Strb(rAsm.W(), M(i.m));
+#define Y(vasm_opc, arm_mov, arm_str, gpr_w, src) \
+void Vgen::emit(const vasm_opc& i) {              \
+  a->arm_mov(rAsm.gpr_w(), src);                  \
+  a->arm_str(rAsm.gpr_w(), M(i.m));               \
 }
 
-void Vgen::emit(const storeli& i) {
-  a->Mov(rAsm.W(), i.s.l());
-  a->Str(rAsm.W(), M(i.m));
-}
+Y(storebi, Mov, Strb, W, i.s.l())
+Y(storeli, Mov, Str, W, i.s.l())
+Y(storeqi, Mov, Str, X, i.s.q())
+Y(storesd, Fmov, Str, X, D(i.s))
+Y(storewi, Mov, Strh, W, i.s.l())
 
-void Vgen::emit(const storeqi& i) {
-  a->Mov(rAsm, i.s.q());
-  a->Str(rAsm, M(i.m));
-}
-
-void Vgen::emit(const storesd& i) {
-  a->Fmov(rAsm, D(i.s));
-  a->Str(rAsm, M(i.m));
-}
-
-void Vgen::emit(const storewi& i) {
-  a->Mov(rAsm.W(), i.s.l());
-  a->Strh(rAsm.W(), M(i.m));
-}
+#undef Y
 
 void Vgen::emit(const unpcklpd& i) {
   a->fmov(D(i.d), D(i.s0));
@@ -906,6 +899,10 @@ Y(lslxis, X, xzr, 64)
 
 #undef Y
 
+void Vgen::emit(const popp& i) {
+  a->Ldp(X(i.s0), X(i.s1), MemOperand(sp, 16, PostIndex));
+}
+
 void Vgen::emit(const pushp& i) {
   a->Stp(X(i.s0), X(i.s1), MemOperand(sp, -16, PreIndex));
 }
@@ -923,7 +920,7 @@ void lower(Vunit& unit, Inst& inst, Vlabel b, size_t i) {}
 ///////////////////////////////////////////////////////////////////////////////
 
 /*
- * TODO: Using load size (ldr[bh]?), apply scaled address
+ * TODO: Using load size (ldr[bh]?), apply scaled address if 'disp' is unsigned
  */
 void lowerVptr(Vptr& p, Vout& v) {
   enum {
@@ -972,7 +969,7 @@ void lowerVptr(Vptr& p, Vout& v) {
   
       // #imm is out of range, convert to [base, index]
       auto index = v.makeReg();
-      v << ldimml{Immed(p.disp), index};
+      v << ldimmq{Immed64(p.disp), index};
       p.index = index;
       p.scale = 1;
       p.disp = 0;
@@ -982,7 +979,7 @@ void lowerVptr(Vptr& p, Vout& v) {
     case DISP: {
       // Not supported, convert to [base]
       auto base = v.makeReg();
-      v << ldimml{Immed(p.disp), base};
+      v << ldimmq{Immed64(p.disp), base};
       p.base = base;
       p.index = Vreg{};
       p.scale = 1;
@@ -1004,7 +1001,7 @@ void lowerVptr(Vptr& p, Vout& v) {
         p.scale = 1;
       } else {
         auto index = v.makeReg();
-        v << ldimml{Immed(p.disp), index};
+        v << ldimmq{Immed64(p.disp), index};
         p.index = index;
         p.scale = 1;
         p.disp = 0;
