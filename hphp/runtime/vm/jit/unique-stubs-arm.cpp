@@ -130,14 +130,14 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
  * expects `tv' to be the address of a TypedValue with refcounted type `type'
  * (though it may be static, and we will do nothing in that case).
  *
- * The `saved' register should be a callee-saved GP register that the helper
- * can use to preserve `tv' across native calls.
+ * The `live' registers must be preserved across any native calls (and
+ * generally left untouched).
  */
 static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
                             PhysReg tv, PhysReg type, RegSet live) {
   return vwrap(cb, data, fixups, [&] (Vout& v) {
-    // Enter the stub
-    v << stublogue{};
+    // Save FP/LR
+    v << pushp{rfp(), rlink()};
 
     // We use the first argument register for the TV data because we might pass
     // it to the native release call.  It's not live when we enter the helper.
@@ -153,7 +153,9 @@ static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
       ifThen(v, CC_NE, sf, [&] (Vout& v) {
         // The refcount is greater than 1; decref it.
         v << declm{data[FAST_REFCOUNT_OFFSET], v.makeReg()};
-        v << stubret{};
+        // Pop FP/LR and return
+        v << popp{rfp(), rlink()};
+        v << ret{live};
       });
 
       // Note that the stack is aligned since we called to this helper from an
@@ -172,7 +174,9 @@ static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
     });
 
     // Either we did a decref, or the value was static.
-    v << stubret{};
+    // Pop FP/LR and return
+    v << popp{rfp(), rlink()};
+    v << ret{live};
   });
 }
 
@@ -199,7 +203,10 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
     emitCmpTVType(v, sf, KindOfRefCountThreshold, type);
 
     ifThen(v, CC_G, sf, [&] (Vout& v) {
+      // Save and restore caller's FP/LR
+      v << pushp{rfp(), rlink()};
       v << call{release, arg_regs(3)};
+      v << popp{rfp(), rlink()};
     });
   };
 
@@ -211,9 +218,6 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
   alignJmpTarget(cb);
 
   us.freeManyLocalsHelper = vwrap(cb, data, [&] (Vout& v) {
-    // Enter the stub
-    v << stublogue{true};
-
     // We always unroll the final `kNumFreeLocalsHelpers' decrefs, so only loop
     // until we hit that point.
     v << lea{rvmfp()[localOffset(kNumFreeLocalsHelpers - 1)], last};
@@ -228,19 +232,23 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
         return sf;
       }
     );
-
-    // Leave the stub
-    v << stubret{RegSet(), true};
   });
 
   for (auto i = kNumFreeLocalsHelpers - 1; i >= 0; --i) {
     us.freeLocalsHelpers[i] = vwrap(cb, data, [&] (Vout& v) {
-      v << stublogue{true};
       decref_local(v);
       if (i != 0) next_local(v);
-      v << stubret{RegSet(), true};
     });
   }
+
+  // All the stub entrypoints share the same ret.
+  vwrap(cb, data, fixups, [] (Vout& v) { v << ret{}; });
+
+  // FIXME: This stub is hot, so make sure to keep it small.
+#if 0
+  always_assert(Stats::enabled() ||
+                (cb.frontier() - release <= 4 * x64::cache_line_size()));
+#endif
 
   fixups.process(nullptr);
   return release;
