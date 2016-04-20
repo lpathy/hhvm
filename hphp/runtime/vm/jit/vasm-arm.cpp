@@ -205,6 +205,7 @@ struct Vgen {
   void emit(const cvttsd2siq& i) { a->Fcvtzs(X(i.d), D(i.s)); }
   void emit(const decl& i) { a->Sub(W(i.d), W(i.s), 1, SetFlags); }
   void emit(const decq& i) { a->Sub(X(i.d), X(i.s), 1, SetFlags); }
+  void emit(const decqmlock& i);
   void emit(const divint& i) { a->Sdiv(X(i.d), X(i.s0), X(i.s1)); }
   void emit(const divsd& i) { a->Fdiv(D(i.d), D(i.s1), D(i.s0)); }
   void emit(const imul& i);
@@ -581,15 +582,21 @@ void Vgen::emit(const imul& i) {
   a->Bic(vixl::xzr, X(i.d), vixl::xzr, SetFlags);
 }
 
-void Vgen::emit(const incqmlock& i) {
-  auto adr = M(i.m);
-  vixl::Label again;
-  a->bind(&again);
-  a->ldxr(rAsm, adr);
-  a->Add(rAsm, rAsm, 1, SetFlags);
-  a->stxr(rAsm.W(), rAsm, adr);
-  a->Cbnz(rAsm.W(), &again);
+#define Y(vasm_opc, arm_opc)           \
+void Vgen::emit(const vasm_opc& i) {   \
+  auto adr = M(i.m);                   \
+  vixl::Label again;                   \
+  a->bind(&again);                     \
+  a->ldxr(rAsm, adr);                  \
+  a->arm_opc(rAsm, rAsm, 1, SetFlags); \
+  a->stxr(rAsm.W(), rAsm, adr);        \
+  a->Cbnz(rAsm.W(), &again);           \
 }
+
+Y(incqmlock, Add)
+Y(decqmlock, Sub)
+
+#undef Y
 
 void Vgen::emit(const jcc& i) {
   if (i.targets[1] != i.targets[0]) {
@@ -1037,6 +1044,7 @@ void lower(Vunit& u, vasm_opc& i, Vlabel b, size_t z) { \
 
 Y(callm, target)
 Y(cloadq, t)
+Y(decqmlock, m)
 Y(incqmlock, m)
 Y(jmpm, target)
 Y(lea, s)
