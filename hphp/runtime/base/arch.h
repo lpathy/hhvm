@@ -18,6 +18,8 @@
 
 #include "hphp/runtime/base/runtime-option.h"
 
+#include "hphp/util/assertions.h"
+
 #include <boost/type_traits.hpp>
 
 namespace HPHP {
