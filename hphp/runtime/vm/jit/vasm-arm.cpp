@@ -869,7 +869,8 @@ Y(lsrxi, Lsr, X)
  *
  * In the following implementation,
  *   N, Z are updated according to result
- *   C is updated with the shifted out bit
+ *   C is updated with the shifted out bit flipped
+ *     Note: Flipping is needed to make jcc{CC_BE} and jcc{CC_A} work
  *   V is cleared (FIXME)
  *   PF, AF are not available
  */
@@ -882,6 +883,7 @@ void Vgen::emit(const vasm_opc& i) {                    \
     a->arm_opc(gpr_w(i.df), gpr_w(i.s1), i.s0.l() - 1); \
     d = i.df;                                           \
   }                                                     \
+  a->mvn(W(d).X(), W(d).X());                           \
   a->bfm(rAsm, W(d).X(), 35, 0);                        \
   a->Msr(NZCV, rAsm);                                   \
 }
@@ -897,6 +899,7 @@ void Vgen::emit(const vasm_opc& i) {                \
   a->Bic(vixl::zr, gpr_w(i.d), vixl::zr, SetFlags); \
   a->Mrs(rAsm, NZCV);                               \
   a->Lsr(gpr_w(i.df), gpr_w(i.s1), sz - i.s0.l());  \
+  a->mvn(W(i.df).X(), W(i.df).X());                 \
   a->bfm(rAsm, W(i.df).X(), 35, 0);                 \
   a->Msr(NZCV, rAsm);                               \
 }
