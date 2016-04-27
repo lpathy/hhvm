@@ -65,9 +65,7 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
     // other stubs because we need the return IP for this frame in the %rbp
     // chain, in order to find the proper fixup for the VMRegAnchor in the
     // intercept handler.
-
-    v << push{rlink()};
-    v << push{rvmfp()};
+    v << stublogue{true};
     v << copy{rsp(), rvmfp()};
 
     // When we call the event hook, it might tell us to skip the callee
@@ -95,7 +93,8 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
       v << pop{rvmfp()};
       v << pop{saved_rip};
 
-      // Drop our call frame; Pop off rlink() and rvmfp() pushed above
+      // Drop our call frame; the stublogue{} instruction guarantees that this
+      // is exactly 16 bytes.
       v << lea{rsp()[16], rsp()};
 
       // Sync vmsp and the return regs.
@@ -112,9 +111,7 @@ TCA emitFunctionEnterHelper(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
     v << lea{rsp()[16], rsp()};
 
     // Restore rvmfp() and return to the callee's func prologue.
-    v << pop{rvmfp()};
-    v << pop{rlink()};
-    v << ret{};
+    v << stubret{RegSet(), true};
   });
 
   return start;
@@ -268,7 +265,7 @@ TCA emitCallToExit(CodeBlock& cb, DataBlock& data, const UniqueStubs& us) {
   a.Ldr(rAsm, &target_data);
   a.Br(rAsm);
   a.bind(&target_data);
-  a.dc64(reinterpret_cast<int64_t>(us.enterTCExit));
+  a.dc64(us.enterTCExit);
   return start;
 }
 
