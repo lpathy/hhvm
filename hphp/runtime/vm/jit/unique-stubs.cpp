@@ -884,6 +884,19 @@ TCA emitDecRefGeneric(CodeBlock& cb, DataBlock& data) {
   auto const start = vwrap(cb, data, meta, [] (Vout& v) {
     v << stublogue{};
 
+    // FIXME: Save 'callee' saved registers (4 for now)
+    switch (arch()) {
+      case Arch::X64:
+        break;
+      case Arch::ARM:
+        v << pushp{PhysReg{vixl::x19}, PhysReg{vixl::x20}};
+        v << pushp{PhysReg{vixl::x21}, PhysReg{vixl::x22}};
+        break;
+      case Arch::PPC64:
+        not_implemented();
+        break;
+    }
+
     auto const rdata = rarg(0);
     auto const rtype = rarg(1);
 
@@ -913,6 +926,20 @@ TCA emitDecRefGeneric(CodeBlock& cb, DataBlock& data) {
     };
 
     emitDecRefWork(v, v, rdata, destroy, false);
+
+    // FIXME: Restore 'callee' saved registers
+    switch (arch()) {
+      case Arch::X64:
+        break;
+      case Arch::ARM:
+        v << popp{PhysReg{vixl::x21}, PhysReg{vixl::x22}};
+        v << popp{PhysReg{vixl::x19}, PhysReg{vixl::x20}};
+        break;
+      case Arch::PPC64:
+        not_implemented();
+        break;
+    }
+
     v << stubret{};
   });
 
