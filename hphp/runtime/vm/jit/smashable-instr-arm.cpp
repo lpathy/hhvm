@@ -31,11 +31,6 @@ namespace HPHP { namespace jit { namespace arm {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-constexpr uint8_t kSmashCallTailLen = 4 + 8; // Branch + Immediate
-constexpr uint8_t kSmashCallTotalLen = smashableCallLen() + kSmashCallTailLen;
-
-///////////////////////////////////////////////////////////////////////////////
-
 /*
  * For smashable jmps and calls in ARM, we emit the target address straight
  * into the instruction stream, and then do a pc-relative load to read it.
@@ -81,17 +76,17 @@ TCA emitSmashableCall(CodeBlock& cb, CGMeta& fixups, TCA target) {
 
   auto const start = cb.frontier();
 
-  // Load the target address and call it
-  a.    Ldr  (rAsm, &target_data);
-  a.    Blr  (rAsm);
-
-  // When the call returns, jump over the data
+  // Jump over the data
   a.    B    (&after_data);
 
   // Emit the call target into the instruction stream.
   a.    bind (&target_data);
-  a.    dc64 (reinterpret_cast<int64_t>(target));
+  a.    dc64 (target);
   a.    bind (&after_data);
+
+  // Load the target address and call it
+  a.    Ldr  (rAsm, &target_data);
+  a.    Blr  (rAsm);
 
   return start;
 }
@@ -107,7 +102,7 @@ TCA emitSmashableJmpImpl(CodeBlock& cb, TCA target) {
 
   // Emit the jmp target into the instruction stream.
   a.    bind (&target_data);
-  a.    dc64 (reinterpret_cast<int64_t>(target));
+  a.    dc64 (target);
 
   return start;
 }
@@ -169,7 +164,8 @@ void smashCmpq(TCA inst, uint32_t target) {
 }
 
 void smashCall(TCA inst, TCA target) {
-  smashInstr(inst, target, kSmashCallTotalLen);
+  // Skip over the initial branch instruction
+  *reinterpret_cast<TCA*>(inst + 4) = target;
 }
 
 void smashJmp(TCA inst, TCA target) {
@@ -199,7 +195,8 @@ uint32_t smashableCmpqImm(TCA inst) {
 }
 
 TCA smashableCallTarget(TCA call) {
-  return *reinterpret_cast<TCA*>(call + kSmashCallTotalLen - 8);
+  // Skip over the initial branch instruction
+  return *reinterpret_cast<TCA*>(call + 4);
 }
 
 TCA smashableJmpTarget(TCA jmp) {
