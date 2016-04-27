@@ -98,6 +98,12 @@ uint8_t Log2(uint8_t value) {
   }
 }
 
+int64_t MSKTOP(int64_t value) {
+  // Make sure that top 32 bits are consistent
+  assertx(((value >> 32) == 0) || ((value >> 32) == -1));
+  return value & ~0u;
+}
+
 vixl::MemOperand M(Vptr p) {
   assertx(p.base.isValid());
   if (p.index.isValid()) {
@@ -173,7 +179,7 @@ struct Vgen {
   void emit(const contenter& i);
 
   // vm entry abi
-  void emit(const leavetc&) { emit(ret{}); }
+  void emit(const leavetc&);
 
   // exceptions
   void emit(const landingpad& i) {}
@@ -220,7 +226,7 @@ struct Vgen {
   void emit(const jmpr& i) { a->Br(X(i.target)); }
   void emit(const lea& i);
   void emit(const leap& i) { a->Mov(X(i.d), i.s.r.disp); }
-  void emit(const lead& i) { a->Mov(X(i.d), (uint64_t) i.s.get()); }
+  void emit(const lead& i) { a->Mov(X(i.d), i.s.get()); }
   void emit(const loadb& i) { a->Ldrsb(W(i.d), M(i.s)); }
   void emit(const loadl& i) { a->Ldr(W(i.d), M(i.s)); }
   void emit(const loadqp& i);
@@ -284,7 +290,7 @@ struct Vgen {
   void emit(const addxi& i) { a->Add(X(i.d), X(i.s1), i.s0.q()); }
   void emit(const asrxi& i);
   void emit(const asrxis& i);
-  void emit(const blrn& i);
+  void emit(const bln& i);
   void emit(const cmpsds& i);
   void emit(const fabs& i) { a->Fabs(D(i.d), D(i.s)); }
   void emit(const lslwi& i);
@@ -386,20 +392,20 @@ void emitSimdImmInt(vixl::MacroAssembler* a, int64_t val, Vreg d) {
   }
 }
 
-#define Y(vasm_opc, simd_w, vr_w, gpr_w, imm_w) \
-void Vgen::emit(const vasm_opc& i) {            \
-  if (i.d.isSIMD()) {                           \
-    emitSimdImmInt(a, i.s.simd_w(), i.d);       \
-  } else {                                      \
-    Vreg##vr_w d = i.d;                         \
-    a->Mov(gpr_w(d), i.s.imm_w());              \
-  }                                             \
+#define Y(vasm_opc, simd_w, vr_w, gpr_w, imm) \
+void Vgen::emit(const vasm_opc& i) {          \
+  if (i.d.isSIMD()) {                         \
+    emitSimdImmInt(a, i.s.simd_w(), i.d);     \
+  } else {                                    \
+    Vreg##vr_w d = i.d;                       \
+    a->Mov(gpr_w(d), imm);                    \
+  }                                           \
 }
 
-Y(ldimmb, ub, 8, W, l)
-Y(ldimmw, w, 16, W, l)
-Y(ldimml, l, 32, W, l)
-Y(ldimmq, q, 64, X, q)
+Y(ldimmb, ub, 8, W, MSKTOP(i.s.l()))
+Y(ldimmw, w, 16, W, MSKTOP(i.s.l()))
+Y(ldimml, l, 32, W, MSKTOP(i.s.l()))
+Y(ldimmq, q, 64, X, i.s.q())
 
 #undef Y
 
@@ -492,7 +498,8 @@ void Vgen::emit(const callfaststub& i) {
 }
 
 void Vgen::emit(const tailcallstub& i) {
-  // SP is 16B aligned here, just jmp
+  // Pop off FP/LR pair and jump to target
+  emit(popp{rfp(), rlink()});
   emit(jmpi{i.target, i.args});
 }
 
@@ -538,6 +545,11 @@ void Vgen::emit(const contenter& i) {
   emit(unwind{{i.targets[0], i.targets[1]}});
 }
 
+void Vgen::emit(const leavetc& i) {
+  emit(popp{PhysReg(rAsm), rlink()});
+  emit(ret{});
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 void Vgen::emit(const nothrow& i) {
@@ -558,15 +570,15 @@ void Vgen::emit(const unwind& i) {
 ///////////////////////////////////////////////////////////////////////////////
 
 void Vgen::emit(const andbi& i) {
-  a->And(W(i.d), W(i.s1), i.s0.l() & ~0u, SetFlags);
+  a->And(W(i.d), W(i.s1), MSKTOP(i.s0.l()), SetFlags);
 }
 
 void Vgen::emit(const andli& i) {
-  a->And(W(i.d), W(i.s1), i.s0.l() & ~0u, SetFlags);
+  a->And(W(i.d), W(i.s1), MSKTOP(i.s0.l()), SetFlags);
 }
 
 void Vgen::emit(const testli& i) {
-  a->Tst(W(i.s1), i.s0.l() & ~0u);
+  a->Tst(W(i.s1), MSKTOP(i.s0.l()));
 }
 
 void Vgen::emit(const cloadq& i) {
@@ -619,7 +631,7 @@ void Vgen::emit(const jcc& i) {
     a->Ldr(rAsm, &data);
     a->Br(rAsm);
     a->bind(&data);
-    a->dc64(reinterpret_cast<int64_t>(a->frontier()));
+    a->dc64(a->frontier());
     a->bind(&skip);
   }
   emit(jmp{i.targets[0]});
@@ -632,7 +644,7 @@ void Vgen::emit(const jcci& i) {
   a->Ldr(rAsm, &data);
   a->Br(rAsm);
   a->bind(&data);
-  a->dc64(reinterpret_cast<int64_t>(i.taken));
+  a->dc64(i.taken);
   a->bind(&skip);
   emit(jmp{i.target});
 }
@@ -644,7 +656,7 @@ void Vgen::emit(const jmp& i) {
   a->Ldr(rAsm, &data);
   a->Br(rAsm);
   a->bind(&data);
-  a->dc64(reinterpret_cast<int64_t>(a->frontier()));
+  a->dc64(a->frontier());
 }
 
 void Vgen::emit(const jmpi& i) {
@@ -652,7 +664,7 @@ void Vgen::emit(const jmpi& i) {
   a->Ldr(rAsm, &data);
   a->Br(rAsm);
   a->bind(&data);
-  a->dc64(reinterpret_cast<int64_t>(i.target));
+  a->dc64(i.target);
 }
 
 void Vgen::emit(const jmpm& i) {
@@ -719,10 +731,10 @@ void Vgen::emit(const vasm_opc& i) {                \
 
 Y(orqi, Orr, X, i.s0.q(), xzr);
 Y(orq, Orr, X, X(i.s0), xzr);
-Y(orswi, Orr, W, i.s0.l() & ~0u, wzr);
+Y(orswi, Orr, W, MSKTOP(i.s0.l()), wzr);
 Y(orsw, Orr, W, W(i.s0), wzr);
 Y(xorb, Eor, W, W(i.s0), wzr);
-Y(xorbi, Eor, W, i.s0.l() & ~0u, wzr);
+Y(xorbi, Eor, W, MSKTOP(i.s0.l()), wzr);
 Y(xorl, Eor, W, W(i.s0), wzr);
 Y(xorq, Eor, X, X(i.s0), xzr);
 Y(xorqi, Eor, X, i.s0.q(), xzr);
@@ -810,7 +822,7 @@ void Vgen::emit(const unpcklpd& i) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void Vgen::emit(const blrn& i) {
+void Vgen::emit(const bln& i) {
   vixl::Label stub;
 
   a->Bl(&stub);
@@ -1220,7 +1232,7 @@ void lower(Vunit& u, calltc& i, Vlabel b, size_t z) {
     v << pushp{r0, r1};
 
     // Emit call to next instruction to balance predictor's stack
-    v << blrn{};
+    v << bln{};
 
     // Set the return address to savedRip and jump to target
     v << copy{r0, rlink()};

@@ -51,7 +51,7 @@ bool effectful(Vinstr& inst) {
     case Vinstr::andqi:
     case Vinstr::asrxi:
     case Vinstr::asrxis:
-    case Vinstr::blrn:
+    case Vinstr::bln:
     case Vinstr::cloadq:
     case Vinstr::cmovb:
     case Vinstr::cmovq:
