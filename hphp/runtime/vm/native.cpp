@@ -172,6 +172,7 @@ void callFunc(const Func* func, void *ctx,
   int64_t GP_args[kMaxBuiltinArgs];
   double SIMD_args[kNumSIMDRegs];
   int GP_count = 0, SIMD_count = 0;
+  bool indResult = false;
 
   auto const numArgs = func->numParams();
   auto retType = func->returnType();
@@ -179,8 +180,10 @@ void callFunc(const Func* func, void *ctx,
   if (!func->isReturnByValue()) {
     if (!retType) {
       GP_args[GP_count++] = (int64_t)&ret;
+      indResult = true;
     } else if (isBuiltinByRef(retType)) {
       GP_args[GP_count++] = (int64_t)&ret.m_data;
+      indResult = true;
     }
   }
 
@@ -204,9 +207,11 @@ void callFunc(const Func* func, void *ctx,
   if (!retType) {
     // A folly::none return signifies Variant.
     if (func->isReturnByValue()) {
-      ret = callFuncTVImpl(f, GP_args, GP_count, SIMD_args, SIMD_count);
+      ret = callFuncTVImpl(f, GP_args, GP_count, SIMD_args, SIMD_count,
+        indResult);
     } else {
-      callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count);
+      callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count,
+        indResult);
       if (ret.m_type == KindOfUninit) {
         ret.m_type = KindOfNull;
       }
@@ -220,17 +225,20 @@ void callFunc(const Func* func, void *ctx,
     case KindOfNull:
     case KindOfBoolean:
       ret.m_data.num =
-        callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count) & 1;
+        callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count,
+          indResult) & 1;
       return;
 
     case KindOfInt64:
       ret.m_data.num =
-        callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count);
+        callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count,
+          indResult);
       return;
 
     case KindOfDouble:
       ret.m_data.dbl =
-        callFuncDoubleImpl(f, GP_args, GP_count, SIMD_args, SIMD_count);
+        callFuncDoubleImpl(f, GP_args, GP_count, SIMD_args, SIMD_count,
+          indResult);
       return;
 
     case KindOfPersistentString:
@@ -241,7 +249,8 @@ void callFunc(const Func* func, void *ctx,
     case KindOfResource:
     case KindOfRef: {
       assert(isBuiltinByRef(ret.m_type));
-      auto val = callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count);
+      auto val = callFuncInt64Impl(f, GP_args, GP_count, SIMD_args, SIMD_count,
+        indResult);
       if (func->isReturnByValue()) ret.m_data.num = val;
       if (ret.m_data.num == 0) {
         ret.m_type = KindOfNull;
