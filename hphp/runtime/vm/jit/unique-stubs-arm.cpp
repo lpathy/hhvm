@@ -166,7 +166,8 @@ static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
       // Between where %rsp is now and the saved RIP of the call into the
       // freeLocalsHelpers stub, we have all the live regs we pushed, plus the
       // saved RIP of the call from the stub to this helper.
-      v << syncpoint{makeIndirectFixup(prs.dwordsPushed() + 1)};
+      // +4 below comes from the pushp(s) of caller and current stub
+      v << syncpoint{makeIndirectFixup(prs.dwordsPushed() + 1 + 4)};
       // fallthru
     });
 
