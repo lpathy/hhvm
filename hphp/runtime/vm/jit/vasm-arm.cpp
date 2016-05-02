@@ -476,14 +476,14 @@ void Vgen::emit(const calls& i) {
 
 void Vgen::emit(const stublogue& i) {
   // Push FP, LR always regardless of i.saveframe (makes SP 16B aligned)
-  emit(pushp{rfp(), rlink()});
+  emit(pushp{rfp(), rlr()});
 }
 
 void Vgen::emit(const stubret& i) {
   if(i.saveframe) {
-    emit(popp{rfp(), rlink()});
+    emit(popp{rfp(), rlr()});
   } else {
-    emit(popp{PhysReg(rAsm), rlink()});
+    emit(popp{PhysReg(rAsm), rlr()});
   }
   emit(ret{});
 }
@@ -499,7 +499,7 @@ void Vgen::emit(const callfaststub& i) {
 
 void Vgen::emit(const tailcallstub& i) {
   // Pop off FP/LR pair and jump to target
-  emit(popp{rfp(), rlink()});
+  emit(popp{rfp(), rlr()});
   emit(jmpi{i.target, i.args});
 }
 
@@ -507,11 +507,11 @@ void Vgen::emit(const tailcallstub& i) {
 
 void Vgen::emit(const phplogue& i) {
   // Save LR in m_savedRip on the current VM frame pointed by 'i.fp'
-  a->Str(X(rlink()), X(i.fp)[AROFF(m_savedRip)]);
+  a->Str(X(rlr()), X(i.fp)[AROFF(m_savedRip)]);
 }
 
 void Vgen::emit(const phpret& i) {
-  a->Ldr(X(rlink()), X(i.fp)[AROFF(m_savedRip)]);
+  a->Ldr(X(rlr()), X(i.fp)[AROFF(m_savedRip)]);
   if (!i.noframe) {
     a->Ldr(X(i.d), X(i.fp)[AROFF(m_sfp)]);
   }
@@ -526,7 +526,7 @@ void Vgen::emit(const callphp& i) {
 void Vgen::emit(const tailcallphp& i) {
   // To make callee's return as caller's return, load the return address at
   // i.fp[AROFF(m_savedRip)] into LR and jmp to target
-  a->Ldr(X(rlink()), X(i.fp)[AROFF(m_savedRip)]);
+  a->Ldr(X(rlr()), X(i.fp)[AROFF(m_savedRip)]);
   emit(jmpr{i.target, i.args});
 }
 
@@ -546,7 +546,7 @@ void Vgen::emit(const contenter& i) {
 }
 
 void Vgen::emit(const leavetc& i) {
-  emit(popp{PhysReg(rAsm), rlink()});
+  emit(popp{PhysReg(rAsm), rlr()});
   emit(ret{});
 }
 
@@ -1235,7 +1235,7 @@ void lower(Vunit& u, calltc& i, Vlabel b, size_t z) {
     v << bln{};
 
     // Set the return address to savedRip and jump to target
-    v << copy{r0, rlink()};
+    v << copy{r0, rlr()};
     v << jmpr{i.target, i.args};
   });
 }

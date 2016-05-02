@@ -59,10 +59,10 @@ PhysReg rarg(size_t i);
 PhysReg rarg_simd(size_t i);
 
 inline PhysReg rfp() { return vixl::x29; }
-inline PhysReg rlink() { return vixl::x30; }
+inline PhysReg rlr() { return vixl::x30; }
 
 constexpr size_t num_arg_regs() { return 8; }
-constexpr size_t num_arg_regs_simd() { return 0; }
+constexpr size_t num_arg_regs_simd() { return 8; }
 
 RegSet arg_regs(size_t n);
 RegSet arg_regs_simd(size_t n);

@@ -45,13 +45,15 @@ const RegSet kGPUnreserved = kGPCallerSaved | kGPCalleeSaved;
 
 const RegSet kGPReserved =
   rHostCallReg | vixl::x17 | rAsm | rvmtl() |
-  rvmfp() | rlink() | vixl::xzr | rsp();
+  rvmfp() | rlr() | vixl::xzr | rsp();
   // ARM machines really only have 32 GP regs.  However, vixl has 33 separate
   // register codes, because it treats the zero register and stack pointer
   // (which are really both register 31) separately.  Rather than lose this
   // distinction in vixl (it's really helpful for avoiding stupid mistakes), we
   // sacrifice the ability to represent all 32 SIMD regs, and pretend there are
   // 33 GP regs.
+
+const RegSet kGPRegs = kGPUnreserved | kGPReserved;
 
 const RegSet kSIMDCallerSaved =
   vixl::d0 | vixl::d1 | vixl::d2 | vixl::d3 |
@@ -69,7 +71,9 @@ const RegSet kSIMDCalleeSaved =
 
 const RegSet kSIMDUnreserved = kSIMDCallerSaved | kSIMDCalleeSaved;
 const RegSet kSIMDReserved;
+const RegSet kSIMDRegs = kSIMDUnreserved | kSIMDReserved;
 
+const RegSet kCallerSaved = kGPCallerSaved | kSIMDCallerSaved;
 const RegSet kCalleeSaved = kGPCalleeSaved | kSIMDCalleeSaved;
 
 const RegSet kSF = RegSet(RegSF{0});
@@ -157,7 +161,8 @@ PhysReg rarg(size_t i) {
   return vixl::Register::XRegFromCode(i);
 }
 PhysReg rarg_simd(size_t i) {
-  not_implemented();
+  assertx(i < num_arg_regs_simd());
+  return vixl::FPRegister::DRegFromCode(i);
 }
 
 RegSet arg_regs(size_t n) {

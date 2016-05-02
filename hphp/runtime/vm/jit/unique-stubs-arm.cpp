@@ -134,7 +134,7 @@ static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
                             PhysReg tv, PhysReg type, RegSet live) {
   return vwrap(cb, data, fixups, [&] (Vout& v) {
     // Save FP/LR
-    v << pushp{rfp(), rlink()};
+    v << pushp{rfp(), rlr()};
 
     // We use the first argument register for the TV data because we might pass
     // it to the native release call.  It's not live when we enter the helper.
@@ -151,7 +151,7 @@ static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
         // The refcount is greater than 1; decref it.
         v << declm{data[FAST_REFCOUNT_OFFSET], v.makeReg()};
         // Pop FP/LR and return
-        v << popp{rfp(), rlink()};
+        v << popp{rfp(), rlr()};
         v << ret{live};
       });
 
@@ -173,7 +173,7 @@ static TCA emitDecRefHelper(CodeBlock& cb, DataBlock& data, CGMeta& fixups,
 
     // Either we did a decref, or the value was static.
     // Pop FP/LR and return
-    v << popp{rfp(), rlink()};
+    v << popp{rfp(), rlr()};
     v << ret{live};
   });
 }
@@ -202,9 +202,9 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
 
     ifThen(v, CC_G, sf, [&] (Vout& v) {
       // Save and restore caller's FP/LR
-      v << pushp{rfp(), rlink()};
+      v << pushp{rfp(), rlr()};
       v << call{release, arg_regs(3)};
-      v << popp{rfp(), rlink()};
+      v << popp{rfp(), rlr()};
     });
   };
 
