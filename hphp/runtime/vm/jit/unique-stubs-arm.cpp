@@ -185,6 +185,8 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
   auto const last = rarg(2);
   auto const type = rarg(3);
   CGMeta fixups;
+  TCA freeLocalsHelpers[kNumFreeLocalsHelpers];
+  TCA freeManyLocalsHelper;
 
   // This stub is very hot; keep it cache-aligned.
   align(cb, &fixups, Alignment::CacheLine, AlignContext::Dead);
@@ -201,10 +203,7 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
     emitCmpTVType(v, sf, KindOfRefCountThreshold, type);
 
     ifThen(v, CC_G, sf, [&] (Vout& v) {
-      // Save and restore caller's FP/LR
-      v << pushp{rfp(), rlr()};
       v << call{release, arg_regs(3)};
-      v << popp{rfp(), rlr()};
     });
   };
 
@@ -215,7 +214,7 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
 
   alignJmpTarget(cb);
 
-  us.freeManyLocalsHelper = vwrap(cb, data, [&] (Vout& v) {
+  freeManyLocalsHelper = vwrap(cb, data, [&] (Vout& v) {
     // We always unroll the final `kNumFreeLocalsHelpers' decrefs, so only loop
     // until we hit that point.
     v << lea{rvmfp()[localOffset(kNumFreeLocalsHelpers - 1)], last};
@@ -233,14 +232,29 @@ TCA emitFreeLocalsHelpers(CodeBlock& cb, DataBlock& data, UniqueStubs& us) {
   });
 
   for (auto i = kNumFreeLocalsHelpers - 1; i >= 0; --i) {
-    us.freeLocalsHelpers[i] = vwrap(cb, data, [&] (Vout& v) {
+    freeLocalsHelpers[i] = vwrap(cb, data, [&] (Vout& v) {
       decref_local(v);
       if (i != 0) next_local(v);
     });
   }
 
   // All the stub entrypoints share the same ret.
-  vwrap(cb, data, fixups, [] (Vout& v) { v << ret{}; });
+  vwrap(cb, data, fixups, [] (Vout& v) {
+    v << popp{rfp(), rlr()};
+    v << ret{};
+  });
+
+  // Create a table of branches
+  us.freeManyLocalsHelper = vwrap(cb, data, [&] (Vout& v) {
+    v << pushp{rfp(), rlr()};
+    v << jmpi{freeManyLocalsHelper};
+  });
+  for (auto i = kNumFreeLocalsHelpers - 1; i >= 0; --i) {
+    us.freeLocalsHelpers[i] = vwrap(cb, data, [&] (Vout& v) {
+      v << pushp{rfp(), rlr()};
+      v << jmpi{freeLocalsHelpers[i]};
+    });
+  }
 
   // FIXME: This stub is hot, so make sure to keep it small.
 #if 0
