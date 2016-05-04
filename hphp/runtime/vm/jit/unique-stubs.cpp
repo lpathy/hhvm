@@ -1052,11 +1052,21 @@ TCA emitHandleSRHelper(CodeBlock& cb, DataBlock& data) {
     storeVMRegs(v);
 
     // Pack the service request args into a svcreq::ReqInfo on the stack.
-    for (auto i = svcreq::kMaxArgs; i-- > 0; ) {
-      v << push{r_svcreq_arg(i)};
+    switch (arch()) {
+    case Arch::ARM:
+      assertx(!(svcreq::kMaxArgs & 1));
+      for (auto i = svcreq::kMaxArgs - 1; i > 0; i -= 2) {
+        v << pushp{r_svcreq_arg(i - 1), r_svcreq_arg(i)};
+      }
+      v << pushp{r_svcreq_req(), r_svcreq_stub()};
+      break;
+    default:
+      for (auto i = svcreq::kMaxArgs; i-- > 0; ) {
+        v << push{r_svcreq_arg(i)};
+      }
+      v << push{r_svcreq_stub()};
+      v << push{r_svcreq_req()};
     }
-    v << push{r_svcreq_stub()};
-    v << push{r_svcreq_req()};
 
     // Call mcg->handleServiceRequest(rsp()).
     auto const args = VregList { v.makeReg(), v.makeReg() };
