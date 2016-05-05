@@ -294,7 +294,7 @@ struct Vunit;
   O(msr, I(s), U(r), Dn)\
   O(orswi, I(s0), UH(s1,d), DH(d,s1) D(sf))\
   O(orsw, Inone, U(s0) U(s1), D(d) D(sf)) \
-  O(popp, Inone, U(s0) U(s1), Dn)\
+  O(popp, Inone, Un, D(d0) D(d1))\
   O(pushp, Inone, U(s0) U(s1), Dn)\
   O(subsb, Inone, UA(s0) U(s1), D(d) D(sf))\
   /* ppc64 instructions */\
@@ -1116,7 +1116,7 @@ struct mrs { Immed s; Vreg64 r; };
 struct msr { Vreg64 r; Immed s; };
 struct orswi { Immed s0; Vreg32 s1, d; VregSF sf; };
 struct orsw { Vreg32 s0, s1, d; VregSF sf; };
-struct popp { Vreg64 s0, s1; };
+struct popp { Vreg64 d0, d1; };
 struct pushp { Vreg64 s0, s1; };
 struct subsb { Vreg8 s0, s1, d; VregSF sf; };
 

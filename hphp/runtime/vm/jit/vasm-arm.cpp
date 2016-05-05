@@ -922,7 +922,7 @@ Y(lslxis, X, xzr, 64)
 #undef Y
 
 void Vgen::emit(const popp& i) {
-  a->Ldp(X(i.s0), X(i.s1), MemOperand(sp, 16, PostIndex));
+  a->Ldp(X(i.d0), X(i.d1), MemOperand(sp, 16, PostIndex));
 }
 
 void Vgen::emit(const pushp& i) {
