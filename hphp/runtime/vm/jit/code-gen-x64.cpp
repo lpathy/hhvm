@@ -747,75 +747,7 @@ void
 CodeGenerator::cgCallHelper(Vout& v, CallSpec call, const CallDest& dstInfo,
                             SyncOptions sync, const ArgGroup& args,
                             bool indResult) {
-  auto const inst = args.inst();
-  jit::vector<Vreg> vargs, vSimdArgs, vStkArgs;
-  for (size_t i = 0; i < args.numGpArgs(); ++i) {
-    prepareArg(args.gpArg(i), v, vargs);
-  }
-  for (size_t i = 0; i < args.numSimdArgs(); ++i) {
-    prepareArg(args.simdArg(i), v, vSimdArgs);
-  }
-  for (size_t i = 0; i < args.numStackArgs(); ++i) {
-    prepareArg(args.stkArg(i), v, vStkArgs);
-  }
-
-  Fixup syncFixup;
-  if (RuntimeOption::HHProfEnabled || sync != SyncOptions::None) {
-    // If we are profiling the heap, we always need to sync because regs need
-    // to be correct during allocations no matter what
-    syncFixup = makeFixup(inst->marker(), sync);
-  }
-
-  Vlabel targets[2];
-  bool nothrow = false;
-  auto* taken = inst->taken();
-  auto const do_catch = taken && taken->isCatch();
-  if (do_catch) {
-    always_assert_flog(
-      inst->is(InterpOne) || sync != SyncOptions::None,
-      "cgCallHelper called with None but inst has a catch block: {}\n",
-      *inst
-    );
-    always_assert_flog(
-      taken->catchMarker() == inst->marker(),
-      "Catch trace doesn't match fixup:\n"
-      "Instruction: {}\n"
-      "Catch trace: {}\n"
-      "Fixup      : {}\n",
-      inst->toString(),
-      taken->catchMarker().show(),
-      inst->marker().show()
-    );
-
-    targets[0] = v.makeBlock();
-    targets[1] = m_state.labels[taken];
-  } else {
-    // The current instruction doesn't have a catch block so it'd better not
-    // throw. Register a null catch trace to indicate this to the
-    // unwinder.
-    nothrow = true;
-  }
-
-  VregList dstRegs;
-  if (dstInfo.reg0.isValid()) {
-    dstRegs.push_back(dstInfo.reg0);
-    if (dstInfo.reg1.isValid()) {
-      dstRegs.push_back(dstInfo.reg1);
-    }
-  }
-
-  auto argsId = v.makeVcallArgs(
-    {std::move(vargs), std::move(vSimdArgs), std::move(vStkArgs)});
-  auto dstId = v.makeTuple(std::move(dstRegs));
-  if (do_catch) {
-    v << vinvoke{call, argsId, dstId, {targets[0], targets[1]},
-                 syncFixup, dstInfo.type, indResult};
-    m_state.catch_calls[inst->taken()] = CatchCall::CPP;
-    v = targets[0];
-  } else {
-    v << vcall{call, argsId, dstId, syncFixup, dstInfo.type, nothrow,
-               indResult};
-  }
+  irlower::cgCallHelper(v, m_state, call, dstInfo, sync, args, indResult);
 }
 
 void CodeGenerator::cgMov(IRInstruction* inst) {
