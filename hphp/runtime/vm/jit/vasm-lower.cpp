@@ -90,7 +90,7 @@ void lower_vcall(Vunit& unit, Inst& inst, Vlabel b, size_t i) {
     break;
   case Arch::ARM:
     {
-      if (inst.indResult) {
+      if (vargs.indirect) {
         if (vargs.args.size() > 0) {
           // First arg is pointer to storage for the return value
           auto const rreg = rret_indirect();

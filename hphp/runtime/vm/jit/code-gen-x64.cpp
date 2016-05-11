@@ -745,9 +745,8 @@ static void prepareArg(const ArgDesc& arg, Vout& v, VregList& vargs) {
 
 void
 CodeGenerator::cgCallHelper(Vout& v, CallSpec call, const CallDest& dstInfo,
-                            SyncOptions sync, const ArgGroup& args,
-                            bool indResult) {
-  irlower::cgCallHelper(v, m_state, call, dstInfo, sync, args, indResult);
+                            SyncOptions sync, const ArgGroup& args) {
+  irlower::cgCallHelper(v, m_state, call, dstInfo, sync, args);
 }
 
 void CodeGenerator::cgMov(IRInstruction* inst) {
@@ -2925,6 +2924,8 @@ void CodeGenerator::cgCallBuiltin(IRInstruction* inst) {
     }
   }
 
+  callArgs.indirect(!returnByValue && isBuiltinByRef(funcReturnType));
+
   auto dest = [&] () -> CallDest {
     if (isBuiltinByRef(funcReturnType)) {
       if (returnByValue) {
@@ -2942,8 +2943,7 @@ void CodeGenerator::cgCallBuiltin(IRInstruction* inst) {
   }();
 
   cgCallHelper(v, CallSpec::direct(callee->nativeFuncPtr()),
-               dest, SyncOptions::Sync, callArgs,
-               !returnByValue && isBuiltinByRef(funcReturnType));
+               dest, SyncOptions::Sync, callArgs);
 
   // For primitive return types (int, bool, double), and returnByValue,
   // the return value is already in dstReg/dstType
