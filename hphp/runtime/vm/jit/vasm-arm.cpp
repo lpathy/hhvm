@@ -125,12 +125,16 @@ struct Vgen {
     : env(env)
     , assem(*env.cb)
     , a(&assem)
+    , base(a->frontier())
     , current(env.current)
     , next(env.next)
     , jmps(env.jmps)
     , jccs(env.jccs)
     , catches(env.catches)
   {}
+  ~Vgen() {
+    __clear_cache(base, a->frontier());
+  }
 
   static void patch(Venv& env);
   static void pad(CodeBlock& cb) {}
@@ -318,6 +322,7 @@ private:
   Venv& env;
   vixl::MacroAssembler assem;
   vixl::MacroAssembler* a;
+  Address base;
 
   const Vlabel current;
   const Vlabel next;
@@ -820,8 +825,9 @@ void Vgen::emit(const srem& i) {
 }
 
 void Vgen::emit(const unpcklpd& i) {
-  a->fmov(D(i.d), D(i.s0));
-  a->fmov(rAsm, D(i.s1));
+  // i.d and i.s1 can be same, i.s0 is unique
+  if(i.d != i.s1) a->fmov(D(i.d), D(i.s1));
+  a->fmov(rAsm, D(i.s0));
   a->fmov(D(i.d), 1, rAsm);
 }
 
