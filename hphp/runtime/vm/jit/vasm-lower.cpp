@@ -151,7 +151,7 @@ void lower_vcall(Vunit& unit, Inst& inst, Vlabel b, size_t i) {
 
   // Copy back the indirect result pointer in case of ARM
   if (arch() == Arch::ARM && needsCopy) {
-    v << copy{rret_indirect(), rarg(0)};
+    v << copy{rret_indirect(), rret(0)};
   }
 
   // For vinvoke, `inst' is no longer valid after this point.
